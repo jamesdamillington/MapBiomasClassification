@@ -109,10 +109,11 @@ IBGE CODE	STATE
 51	Mato Grosso
 52	Goiás
 
-Create a summary table of classified map data for municipalities in states we are simulating 
+Create a summary table of classified map data for municipalities in states we are simulating.
 ```{r}
 
-munis.r <- raster("sim10_BRmunis_latlon_5km_2018-04-27.asc")  #do this with zip file
+unzip(zipfile="sim10_BRmunis_latlon_5km_2018-04-27.zip",files="sim10_BRmunis_latlon_5km_2018-04-27.asc",exdir="ASCII")  # unzip file 
+munis.r <- raster("ASCII/sim10_BRmunis_latlon_5km_2018-04-27.asc")  #do this with zip file
 
 #extract cell values to table format
 munis.t <- extractXYZ(munis.r, addCellID = F)
@@ -131,18 +132,24 @@ map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row
 #now summarise by muniID
 lcs_map <- getLCs(map_munis)
 
-#convert cell counts to areas (km2)
+#convert cell counts to areas (km2) and add state id
 area_km <- lcs_map %>%
   mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
   mutate(LC2area = round(LC2 * NonNAs) * 25) %>%
   mutate(LC3area = round(LC3 * NonNAs) * 25) %>%
   mutate(LC4area = round(LC4 * NonNAs) * 25) %>%
-  mutate(LC5area = round(LC5 * NonNAs) * 25)
+  mutate(LC5area = round(LC5 * NonNAs) * 25) %>%
+  mutate(state = substr(muniID, 1, 2))
 
 area_km <- area_km %>% dplyr::select(-LC1, -LC2, -LC3, -LC4, -LC5, -NonNAs, -NAs)
 
+area_km_states <- area_km %>%
+  group_by(state) %>%
+  #dplyr::summarise_all(funs(sum)) -> areas_states
+  dplyr::summarise_at(vars(LC1area:LC5area),sum, na.rm=T)   #use _at so state is not summarised
 
 ```
+
 
 
 ##Clean up
