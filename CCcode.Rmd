@@ -151,6 +151,80 @@ area_km_states <- area_km %>%
 ```
 
 
+Summarise MapBiomas data to the states we are simulating
+```{r}
+
+mb_areas <- mb_areas %>%
+  filter(Estados == "TOCANTINS" | 
+      Estados == "BAHIA" |
+      Estados == "MINAS GERAIS" |
+      Estados == "SÃO PAULO" |
+      Estados == "PARANÁ" |
+      Estados == "SANTA CATARINA" |
+      Estados == "RIO GRANDE DO SUL" |
+      Estados == "MATO GROSSO DO SUL" |
+      Estados == "MATO GROSSO" |
+      Estados == "GOIÁS")
+
+mb_areas <- mb_areas %>%
+  mutate(state = if_else(Estados == "TOCANTINS", 17, 
+    if_else(Estados == "BAHIA", 29,
+    if_else(Estados == "MINAS GERAIS", 31,
+    if_else(Estados == "SÃO PAULO", 35,
+    if_else(Estados == "PARANÁ", 41,
+    if_else(Estados == "SANTA CATARINA", 42,
+    if_else(Estados == "RIO GRANDE DO SUL", 43, 
+    if_else(Estados == "MATO GROSSO DO SUL", 50, 
+    if_else(Estados == "MATO GROSSO", 51,
+    if_else(Estados == "GOIÁS", 52, 0
+    ))))))))))
+  )
+
+    
+    
+mb_areas <- mb_areas %>%
+  dplyr::select(state, `2000`, `Classe Nivel 3`) %>% 
+  dplyr::rename(area = `2000`)
+
+#because there is no consistency between land cover labels
+legenda = c("Forest Formations"=1, "Natural Forest Formations"=2, "Dense Forest"=3, "Savanna Formations"=4, "Mangroves"=5,"Forest Plantations"=9, "Non-Forest Natural Formations"=10, "Non Forest Wetlands"=11, "Grasslands"=12, "Other Non Forest Natural Formations"=13, "Farming"=14, "Pasture"=15, "Agriculture"=18, "Agriculture or Pasture"=21, "Non-Vegetated Areas"=22, "Dunes and Beaches"=23, "Urban Infrastructure"=24,"Other Non-Vegetated Area"=25,"Water Bodies"=26, "Non-Observed"=27)
+
+#recode to values (which match the map)
+mb_areas <- mb_areas %>%
+  mutate(LC = recode(`Classe Nivel 3`, !!!legenda))
+
+#use the classification values from above to relassify land covers
+mb_areas$LC <- plyr::mapvalues(mb_areas$LC, from=as.numeric(classification$X__1), to=as.numeric(classification$X__2))
+
+
+mb_areas <- mb_areas %>%
+  group_by(state, LC) %>%
+  dplyr::summarise_at(vars(area),sum, na.rm=T) 
+
+mb_areas <- mb_areas %>%
+  mutate(area_km2 = round(area,0))
+
+mb_areas <- mb_areas %>%
+  dplyr::select(-area)
+  
+mb_areas <- mb_areas %>%
+  spread(LC, area_km2) %>%
+  rename(MB1 = `1`, MB2 = `2`, MB3 = `3`, MB4 = `4`, MB5 = `5`)
+
+```
+
+
+Finally, join the MapBiomas data to the map data
+```{r}
+
+##not working!
+#CData <- left_join(area_km_states, mb_areas, by="state")
+
+```
+
+
+
+
 
 ##Clean up
 ```{r}

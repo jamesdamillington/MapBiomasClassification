@@ -5,74 +5,76 @@ output:
     keep_md: yes
 ---
 
-
+##Load Libraries
 
 ```r
+rm(list=ls())
 library(tidyverse)
-```
-
-```
-## -- Attaching packages ------------------------------------------------------------------------------------------------ tidyverse 1.2.1 --
-```
-
-```
-## v ggplot2 2.2.1     v purrr   0.2.4
-## v tibble  1.4.2     v dplyr   0.7.5
-## v tidyr   0.8.1     v stringr 1.3.1
-## v readr   1.1.1     v forcats 0.3.0
-```
-
-```
-## -- Conflicts --------------------------------------------------------------------------------------------------- tidyverse_conflicts() --
-## x dplyr::filter() masks stats::filter()
-## x dplyr::lag()    masks stats::lag()
-```
-
-```r
 library(raster)
-```
-
-```
-## Loading required package: sp
-```
-
-```
-## 
-## Attaching package: 'raster'
-```
-
-```
-## The following object is masked from 'package:dplyr':
-## 
-##     select
-```
-
-```
-## The following object is masked from 'package:tidyr':
-## 
-##     extract
-```
-
-```r
 library(readxl)
 ```
+
+##Functions
+
+```r
+#raster to xyz  (with help from https://stackoverflow.com/a/19847419)
+#sepcify input raster, whether nodata cells should be output, whether a unique cell ID should be added
+#return is a matrix. note format is row (Y) then col (X)
+extractXYZ <- function(raster, nodata = FALSE, addCellID = TRUE){
+  
+  vals <- raster::extract(raster, 1:ncell(raster))   #specify raster otherwise dplyr used
+  xys <- rowColFromCell(raster,1:ncell(raster))
+  combine <- cbind(xys,vals)
+  
+  if(addCellID){
+    combine <- cbind(1:length(combine[,1]), combine)
+  }
+  
+  if(!nodata){
+    combine <- combine[!rowSums(!is.finite(combine)),]  #from https://stackoverflow.com/a/15773560
+  }
+  
+  return(combine)
+}
+
+
+getLCs <- function(data)
+{
+  #calculates proportion of each LC in the muni (ignoring NAs, help from https://stackoverflow.com/a/44290753)
+  data %>%
+    group_by(muniID) %>%
+    dplyr::summarise(LC1 = round(sum(map == 1, na.rm = T) / sum(!is.na(map)), 3),
+                     LC2 = round(sum(map == 2, na.rm = T) / sum(!is.na(map)), 3),
+                     LC3 = round(sum(map == 3, na.rm = T) / sum(!is.na(map)), 3),
+                     LC4 = round(sum(map == 4, na.rm = T) / sum(!is.na(map)), 3),
+                     LC5 = round(sum(map == 5, na.rm = T) / sum(!is.na(map)), 3),
+                     NonNAs = sum(!is.na(map)),
+                     NAs = sum(is.na(map))
+    ) -> LCs
+
+  return(LCs)
+}
+```
+
 ##Load Data
 Maps from Zip
 
 ```r
-unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip",files="ASCII/brazillc_2000_5km_int.txt")  # unzip your file 
-
-map <- raster("ASCII/brazillc_2000_5km_int.txt")
+unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip",files="ASCII/brazillc_2000_5km_int.txt")  # unzip file 
+map <- raster("ASCII/brazillc_2000_5km_int.txt") 
+plot(map) 
 ```
+
+![](CCcode_files/figure-html/unnamed-chunk-3-1.png)<!-- -->
 
 
 Classification from Excel
 
 ```r
-classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = "PastureB", range="B1:C21", col_names=F)  
+classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = "PastureB", range="B2:C21", col_names=F)  
 ```
 
-MapBiomas land areas from csv
+MapBiomas land areas from csv (areas are km2)
 
 ```r
 mb_areas <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 Municipios.csv")  
@@ -81,12 +83,149 @@ mb_areas <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 M
 
 ##Classify
 
+```r
+map <- reclassify(map, rcl=as.matrix(classification))
+plot(map, col=c("green", "pink", "yellow", "grey", "brown"))
+```
+
+![](CCcode_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
+
+
 ##Compare map areas to MapBiomas area 
+Let's compare areas at the state level for the 10 states being simulated. These are:
+IBGE CODE	STATE
+17	Tocantins
+29	Bahia
+31	Minas Gerais
+35	São Paulo
+41	Paraná
+42	Santa Catarina
+43	Rio Grande do Sul
+50	Mato Grosso do Sul
+51	Mato Grosso
+52	Goiás
+
+Create a summary table of classified map data for municipalities in states we are simulating.
+
+```r
+unzip(zipfile="sim10_BRmunis_latlon_5km_2018-04-27.zip",files="sim10_BRmunis_latlon_5km_2018-04-27.asc",exdir="ASCII")  # unzip file 
+munis.r <- raster("ASCII/sim10_BRmunis_latlon_5km_2018-04-27.asc")  #do this with zip file
+
+#extract cell values to table format
+munis.t <- extractXYZ(munis.r, addCellID = F)
+map.t <- extractXYZ(map, addCellID = F)
+
+munis.t <- as.data.frame(munis.t)
+munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
+
+
+map.t <- as.data.frame(map.t)
+map.t <- plyr::rename(map.t, c("vals" = "map"))
+
+#so need to join 
+map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row" = "row", "col" = "col"))
+
+#now summarise by muniID
+lcs_map <- getLCs(map_munis)
+
+#convert cell counts to areas (km2) and add state id
+area_km <- lcs_map %>%
+  mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
+  mutate(LC2area = round(LC2 * NonNAs) * 25) %>%
+  mutate(LC3area = round(LC3 * NonNAs) * 25) %>%
+  mutate(LC4area = round(LC4 * NonNAs) * 25) %>%
+  mutate(LC5area = round(LC5 * NonNAs) * 25) %>%
+  mutate(state = substr(muniID, 1, 2))
+
+area_km <- area_km %>% dplyr::select(-LC1, -LC2, -LC3, -LC4, -LC5, -NonNAs, -NAs)
+
+area_km_states <- area_km %>%
+  group_by(state) %>%
+  #dplyr::summarise_all(funs(sum)) -> areas_states
+  dplyr::summarise_at(vars(LC1area:LC5area),sum, na.rm=T)   #use _at so state is not summarised
+```
+
+
+Summarise MapBiomas data to the states we are simulating
+
+```r
+mb_areas <- mb_areas %>%
+  filter(Estados == "TOCANTINS" | 
+      Estados == "BAHIA" |
+      Estados == "MINAS GERAIS" |
+      Estados == "SÃO PAULO" |
+      Estados == "PARANÁ" |
+      Estados == "SANTA CATARINA" |
+      Estados == "RIO GRANDE DO SUL" |
+      Estados == "MATO GROSSO DO SUL" |
+      Estados == "MATO GROSSO" |
+      Estados == "GOIÁS")
+
+mb_areas <- mb_areas %>%
+  mutate(state = if_else(Estados == "TOCANTINS", 17, 
+    if_else(Estados == "BAHIA", 29,
+    if_else(Estados == "MINAS GERAIS", 31,
+    if_else(Estados == "SÃO PAULO", 35,
+    if_else(Estados == "PARANÁ", 41,
+    if_else(Estados == "SANTA CATARINA", 42,
+    if_else(Estados == "RIO GRANDE DO SUL", 43, 
+    if_else(Estados == "MATO GROSSO DO SUL", 50, 
+    if_else(Estados == "MATO GROSSO", 51,
+    if_else(Estados == "GOIÁS", 52, 0
+    ))))))))))
+  )
+
+    
+    
+mb_areas <- mb_areas %>%
+  dplyr::select(state, `2000`, `Classe Nivel 3`) %>% 
+  dplyr::rename(area = `2000`)
+
+#because there is no consistency between land cover labels
+legenda = c("Forest Formations"=1, "Natural Forest Formations"=2, "Dense Forest"=3, "Savanna Formations"=4, "Mangroves"=5,"Forest Plantations"=9, "Non-Forest Natural Formations"=10, "Non Forest Wetlands"=11, "Grasslands"=12, "Other Non Forest Natural Formations"=13, "Farming"=14, "Pasture"=15, "Agriculture"=18, "Agriculture or Pasture"=21, "Non-Vegetated Areas"=22, "Dunes and Beaches"=23, "Urban Infrastructure"=24,"Other Non-Vegetated Area"=25,"Water Bodies"=26, "Non-Observed"=27)
+
+#recode to values (which match the map)
+mb_areas <- mb_areas %>%
+  mutate(LC = recode(`Classe Nivel 3`, !!!legenda))
+
+#use the classification values from above to relassify land covers
+mb_areas$LC <- plyr::mapvalues(mb_areas$LC, from=as.numeric(classification$X__1), to=as.numeric(classification$X__2))
+```
+
+```
+## The following `from` values were not present in `x`: 2, 3, 10, 14
+```
+
+```r
+mb_areas <- mb_areas %>%
+  group_by(state, LC) %>%
+  dplyr::summarise_at(vars(area),sum, na.rm=T) 
+
+mb_areas <- mb_areas %>%
+  mutate(area_km2 = round(area,0))
+
+mb_areas <- mb_areas %>%
+  dplyr::select(-area)
+  
+mb_areas <- mb_areas %>%
+  spread(LC, area_km2) %>%
+  rename(MB1 = `1`, MB2 = `2`, MB3 = `3`, MB4 = `4`, MB5 = `5`)
+```
+
+
+Finally, join the MapBiomas data to the map data
+
+```r
+##not working!
+#CData <- left_join(area_km_states, mb_areas, by="state")
+```
+
+
 
 
 
 ##Clean up
 
 ```r
-unlink("ASCII", recursive = T)
+unlink("ASCII", recursive = T) #delete ASCII directory created above
 ```
