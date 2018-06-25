@@ -15,6 +15,16 @@ library(readxl)
 ```
 ##Load Data
 Maps from Zip
+```{r}
+
+
+unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip",files="ASCII/brazillc_2000_5km_int.txt")  # unzip your file 
+
+map <- raster("ASCII/brazillc_2000_5km_int.txt")
+
+
+```
+
 
 Classification from Excel
 ```{r warning=F, message=F}
@@ -38,5 +48,9 @@ mb_areas <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 M
 
 
 
+##Clean up
+```{r}
 
+unlink("ASCII", recursive = T)
 
+```
