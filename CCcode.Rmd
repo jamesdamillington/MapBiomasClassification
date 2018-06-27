@@ -248,6 +248,31 @@ Finally, join the MapBiomas data to the map data
 
 CData <- union_all(map_areas, mb_areas)
 
+#relabel states to characters
+CData <- CData %>%
+  mutate(state = if_else(state == 17, "TO", 
+    if_else(state == 29, "BA",
+    if_else(state == 31, "MG",
+    if_else(state == 35, "SP",
+    if_else(state == 41, "PR",
+    if_else(state == 42, "SC",
+    if_else(state == 43, "RS", 
+    if_else(state == 50, "MS",
+    if_else(state == 51, "MT",
+    if_else(state == 52, "GO", "NA"
+    ))))))))))
+  )
+
+#relabel LCs to characters
+CData <- CData %>%
+  mutate(LC = if_else(LC == 1, "Nature", 
+    if_else(LC == 2, "Other Agri",
+    if_else(LC == 3, "Agri",
+    if_else(LC == 4, "Other",
+    if_else(LC == 5, "Pasture", "NA"
+    )))))
+  )
+
 
 ```
 
@@ -256,19 +281,12 @@ CData <- union_all(map_areas, mb_areas)
 
 
 
-ggplot(CData, aes(x=source, y=area, fill=factor(LC))) + 
+ggplot(CData, aes(x=source, y=area, fill=LC)) + 
   geom_bar(stat="identity", colour="white", position = "fill") +
   scale_y_continuous(labels = percent_format()) +
   facet_grid(.~state) +
-  xlab("Beverage")+ylab("Mean Percentage")
+  xlab("Data Source")+ylab("Percentage")
 
-
-ggplot(means.long,aes(x=variable,y=value,fill=factor(gender)))+
-  geom_bar(stat="identity",position="dodge")+
-  scale_fill_discrete(name="Gender",
-                      breaks=c(1, 2),
-                      labels=c("Male", "Female"))+
-  xlab("Beverage")+ylab("Mean Percentage")
 
 
 
