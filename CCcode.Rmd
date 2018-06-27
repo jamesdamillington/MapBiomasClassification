@@ -13,6 +13,7 @@ library(tidyverse)
 library(raster)
 library(readxl)
 library(scales)
+library(knitr)
 
 ```
 
@@ -287,7 +288,67 @@ ggplot(CData, aes(x=source, y=area, fill=LC)) +
   facet_grid(.~state) +
   xlab("Data Source")+ylab("Percentage")
 
+ggplot(CData, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white") +
+  facet_grid(.~state) +
+  xlab("Data Source")+ylab("Area km2")
 
+
+```
+
+##Quantitative Differences
+```{r}
+
+CDataW <- CData %>%
+  mutate(sourceLC = paste(source, LC, sep=" ")) %>%
+  dplyr::select(-source, -LC) %>%
+  spread(key = c(sourceLC), value = area) %>%
+  dplyr::select(`Map Agri`, `MB Agri`, `Map Nature`, `MB Nature`, `Map Other`, `MB Other`, `Map Other Agri`, `MB Other Agri`, `Map Pasture`, `MB Pasture`)
+
+kable(CDataW)
+
+CDataW <- CDataW %>%
+  mutate(NatureAbsDiffc = `MB Nature` - `Map Nature`) %>%
+  mutate(NaturePropDiffc = round(NatureAbsDiffc / `MB Nature`,3)) %>% 
+  mutate(OAAbsDiffc = `MB Other Agri` - `Map Other Agri`) %>%
+  mutate(OAPropDiffc = round(OAAbsDiffc / `MB Other Agri`,3)) %>% 
+  mutate(AgriAbsDiffc = `MB Agri` - `Map Agri`) %>%
+  mutate(AgriPropDiffc = round(AgriAbsDiffc / `MB Agri`,3)) %>% 
+  mutate(OtherAbsDiffc = `MB Other` - `Map Other`) %>%
+  mutate(OtherPropDiffc = round(OtherAbsDiffc / `MB Other`,3)) %>% 
+  mutate(PastureAbsDiffc = `MB Pasture` - `Map Pasture`) %>%
+  mutate(PasturePropDiffc = round(PastureAbsDiffc / `MB Pasture`,3)) 
+```
+
+##Absolute Differences
+```{r}
+abs <- CDataW %>%
+  dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("PropDiffc"))
+
+kable(abs)
+
+abs <- abs %>%
+  gather(key = LC, value = area, -state)
+
+ggplot(abs, aes(x=state, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  xlab("Data Source")+ylab("Abs Diff km2")
+```
+
+##Proportional Diferences
+```{r}
+
+prop <- CDataW %>%
+  dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("AbsDiffc")) 
+
+kable(prop)
+
+prop <- prop %>%
+  gather(key = LC, value = area, -state)
+
+ggplot(prop, aes(x=state, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  xlab("Data Source")+ylab("Prop Diff")
 
 
 ```
@@ -297,6 +358,6 @@ ggplot(CData, aes(x=source, y=area, fill=LC)) +
 ##Clean up
 ```{r}
 
-#unlink("ASCII", recursive = T) #delete ASCII directory created above
+unlink("ASCII", recursive = T) #delete ASCII directory created above
 
 ```
