@@ -12,6 +12,7 @@ rm(list=ls())
 library(tidyverse)
 library(raster)
 library(readxl)
+library(scales)
 
 ```
 
@@ -80,7 +81,7 @@ classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = "P
 MapBiomas land areas from csv (areas are km2)
 ```{r warning=F, message=F}
 
-mb_areas <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 Municipios.csv")  
+mb_data <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 Municipios.csv")  
 
 
 ```
@@ -130,10 +131,10 @@ map.t <- plyr::rename(map.t, c("vals" = "map"))
 map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row" = "row", "col" = "col"))
 
 #now summarise by muniID
-lcs_map <- getLCs(map_munis)
+lcs_map_munis <- getLCs(map_munis)
 
 #convert cell counts to areas (km2) and add state id
-area_km <- lcs_map %>%
+map_areas_munis <- lcs_map_munis %>%
   mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
   mutate(LC2area = round(LC2 * NonNAs) * 25) %>%
   mutate(LC3area = round(LC3 * NonNAs) * 25) %>%
@@ -141,20 +142,42 @@ area_km <- lcs_map %>%
   mutate(LC5area = round(LC5 * NonNAs) * 25) %>%
   mutate(state = substr(muniID, 1, 2))
 
-area_km <- area_km %>% dplyr::select(-LC1, -LC2, -LC3, -LC4, -LC5, -NonNAs, -NAs)
+#drop original cell-count columns (work with area km2 from now on)
+map_areas_munis <- map_areas_munis %>% dplyr::select(-LC1, -LC2, -LC3, -LC4, -LC5, -NonNAs, -NAs)
 
-area_km_states <- area_km %>%
+#summarise muni areas to state level
+map_areas <- map_areas_munis %>%
   group_by(state) %>%
-  #dplyr::summarise_all(funs(sum)) -> areas_states
-  dplyr::summarise_at(vars(LC1area:LC5area),sum, na.rm=T)   #use _at so state is not summarised
+  dplyr::summarise_at(vars(LC1area:LC5area),sum, na.rm=T) %>%  #use _at so state is not summarised
+  mutate_if(is.character, as.integer)
 
+#gather to long format for union below
+map_areas <- map_areas %>%
+  gather(key = LCa, value = area, -state)
+
+#recode LCs for union below
+map_areas <- map_areas %>%
+  mutate(LC = if_else(LCa == "LC1area", 1, 
+    if_else(LCa == "LC2area", 2,
+    if_else(LCa == "LC3area", 3,
+    if_else(LCa == "LC4area", 4,
+    if_else(LCa == "LC5area", 5, 0)
+    )))))
+
+#add source variable for plotting below (re-order to match map table for union below)
+map_areas <- map_areas %>%
+  dplyr::select(-LCa) %>%
+  mutate(source = "Map") %>%
+  dplyr::select(state, LC, source, area)
+      
 ```
 
 
 Summarise MapBiomas data to the states we are simulating
 ```{r}
 
-mb_areas <- mb_areas %>%
+#filter to get only the states we want
+mb_areas <- mb_data %>%
   filter(Estados == "TOCANTINS" | 
       Estados == "BAHIA" |
       Estados == "MINAS GERAIS" |
@@ -166,6 +189,7 @@ mb_areas <- mb_areas %>%
       Estados == "MATO GROSSO" |
       Estados == "GOIÁS")
 
+#add state column containing state ids
 mb_areas <- mb_areas %>%
   mutate(state = if_else(Estados == "TOCANTINS", 17, 
     if_else(Estados == "BAHIA", 29,
@@ -181,7 +205,7 @@ mb_areas <- mb_areas %>%
   )
 
     
-    
+#select only columns we want    
 mb_areas <- mb_areas %>%
   dplyr::select(state, `2000`, `Classe Nivel 3`) %>% 
   dplyr::rename(area = `2000`)
@@ -196,20 +220,25 @@ mb_areas <- mb_areas %>%
 #use the classification values from above to relassify land covers
 mb_areas$LC <- plyr::mapvalues(mb_areas$LC, from=as.numeric(classification$X__1), to=as.numeric(classification$X__2))
 
-
+#calculate total LC area by state
 mb_areas <- mb_areas %>%
   group_by(state, LC) %>%
   dplyr::summarise_at(vars(area),sum, na.rm=T) 
 
+#round to integer
 mb_areas <- mb_areas %>%
   mutate(area_km2 = round(area,0))
 
+#add source variable for plotting below (re-order to match map table for union below)
 mb_areas <- mb_areas %>%
-  dplyr::select(-area)
+  dplyr::select(-area) %>%
+  mutate(source = "MB") %>%
+  rename(area = area_km2) %>%
+  dplyr::select(state, LC, source, area)
   
-mb_areas <- mb_areas %>%
-  spread(LC, area_km2) %>%
-  rename(MB1 = `1`, MB2 = `2`, MB3 = `3`, MB4 = `4`, MB5 = `5`)
+#mb_areas <- mb_areas %>%
+#  spread(LC, area_km2) %>%
+#  rename(MB1 = `1`, MB2 = `2`, MB3 = `3`, MB4 = `4`, MB5 = `5`)
 
 ```
 
@@ -217,18 +246,39 @@ mb_areas <- mb_areas %>%
 Finally, join the MapBiomas data to the map data
 ```{r}
 
-##not working!
-#CData <- left_join(area_km_states, mb_areas, by="state")
+CData <- union_all(map_areas, mb_areas)
+
 
 ```
 
+##Plotting
+```{r}
 
+
+
+ggplot(CData, aes(x=source, y=area, fill=factor(LC))) + 
+  geom_bar(stat="identity", colour="white", position = "fill") +
+  scale_y_continuous(labels = percent_format()) +
+  facet_grid(.~state) +
+  xlab("Beverage")+ylab("Mean Percentage")
+
+
+ggplot(means.long,aes(x=variable,y=value,fill=factor(gender)))+
+  geom_bar(stat="identity",position="dodge")+
+  scale_fill_discrete(name="Gender",
+                      breaks=c(1, 2),
+                      labels=c("Male", "Female"))+
+  xlab("Beverage")+ylab("Mean Percentage")
+
+
+
+```
 
 
 
 ##Clean up
 ```{r}
 
-unlink("ASCII", recursive = T) #delete ASCII directory created above
+#unlink("ASCII", recursive = T) #delete ASCII directory created above
 
 ```
