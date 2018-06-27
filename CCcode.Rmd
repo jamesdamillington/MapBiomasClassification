@@ -296,14 +296,14 @@ ggplot(CData, aes(x=source, y=area, fill=LC)) +
 
 ```
 
-##Quantitative Differences
+###Quantitative Differences
 ```{r}
 
 CDataW <- CData %>%
   mutate(sourceLC = paste(source, LC, sep=" ")) %>%
   dplyr::select(-source, -LC) %>%
   spread(key = c(sourceLC), value = area) %>%
-  dplyr::select(`Map Agri`, `MB Agri`, `Map Nature`, `MB Nature`, `Map Other`, `MB Other`, `Map Other Agri`, `MB Other Agri`, `Map Pasture`, `MB Pasture`)
+  dplyr::select(state, `Map Agri`, `MB Agri`, `Map Nature`, `MB Nature`, `Map Other`, `MB Other`, `Map Other Agri`, `MB Other Agri`, `Map Pasture`, `MB Pasture`)
 
 kable(CDataW)
 
@@ -320,7 +320,7 @@ CDataW <- CDataW %>%
   mutate(PasturePropDiffc = round(PastureAbsDiffc / `MB Pasture`,3)) 
 ```
 
-##Absolute Differences
+###Absolute Differences
 ```{r}
 abs <- CDataW %>%
   dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("PropDiffc"))
@@ -335,7 +335,7 @@ ggplot(abs, aes(x=state, y=area, fill=LC)) +
   xlab("Data Source")+ylab("Abs Diff km2")
 ```
 
-##Proportional Diferences
+###Proportional Diferences
 ```{r}
 
 prop <- CDataW %>%
