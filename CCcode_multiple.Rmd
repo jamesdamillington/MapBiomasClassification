@@ -88,7 +88,19 @@ munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
 Specify classifications to examine (these should be the names of Sheets in the Classifications Excel file). 
 ```{r}
 
+#classifications to loop through 
 cls <- c("PastureA", "PastureB", "PastureC")
+
+#lists to hold data tables 
+CData_ls <- vector('list', length(cls))
+CDataW_ls <- vector('list', length(cls))
+SDataW_ls <- vector('list', length(cls))
+Stotals_ls <- vector('list', length(cls))
+
+names(CData_ls) <- cls
+names(CDataW_ls) <- cls
+names(SDataW_ls) <- cls
+names(Stotals_ls) <- cls
 
 ```
 
@@ -359,6 +371,16 @@ for(i in seq_along(cls)){
   SDataW <- rbind(SDataW, c('Total', MapTotalArea, MBTotalArea, ADiffc, round(PDiffc,3)))
   
   kable(SDataW)
+  
+  
+  
+  
+  #last thing to do in the classifications loop is save the tables to a list
+  CData_ls[[i]] <- CData
+  CDataW_ls[[i]] <- CDataW
+  SDataW_ls[[i]] <- SDataW
+  Stotals_ls[[i]] <- Stotals
+
 }
 
 ```
