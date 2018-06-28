@@ -63,349 +63,311 @@ getLCs <- function(data)
 
 ```
 
-##Load Data
-Maps from Zip
+
+
+
+
+
 ```{r}
 
-unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip",files="ASCII/brazillc_2000_5km_int.txt")  # unzip file 
-map <- raster("ASCII/brazillc_2000_5km_int.txt") 
-plot(map) 
-
-```
+unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip")  # unzip all file 
 
 
-Classification from Excel
-```{r warning=F, message=F}
+classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = "PastureA", range="B2:C21", col_names=F)  
 
-classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = "PastureB", range="B2:C21", col_names=F)  
-
-```
-
-MapBiomas land areas from csv (areas are km2)
-```{r warning=F, message=F}
-
+  
 mb_data <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 Municipios.csv")  
-
-
-```
-
-
-##Classify
-```{r}
-
-map <- reclassify(map, rcl=as.matrix(classification))
-plot(map, col=c("green", "pink", "yellow", "grey", "brown"))
-
-```
-
-
-##Compare map areas to MapBiomas area 
-Let's compare areas at the state level for the 10 states being simulated. These are:
-IBGE CODE	STATE
-17	Tocantins
-29	Bahia
-31	Minas Gerais
-35	São Paulo
-41	Paraná
-42	Santa Catarina
-43	Rio Grande do Sul
-50	Mato Grosso do Sul
-51	Mato Grosso
-52	Goiás
-
-Create a summary table of classified map data for municipalities in states we are simulating.
-```{r}
 
 unzip(zipfile="sim10_BRmunis_latlon_5km_2018-04-27.zip",files="sim10_BRmunis_latlon_5km_2018-04-27.asc",exdir="ASCII")  # unzip file 
 munis.r <- raster("ASCII/sim10_BRmunis_latlon_5km_2018-04-27.asc")  #do this with zip file
 
 #extract cell values to table format
 munis.t <- extractXYZ(munis.r, addCellID = F)
-map.t <- extractXYZ(map, addCellID = F)
-
 munis.t <- as.data.frame(munis.t)
 munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
 
-
-map.t <- as.data.frame(map.t)
-map.t <- plyr::rename(map.t, c("vals" = "map"))
-
-#so need to join 
-map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row" = "row", "col" = "col"))
-
-#now summarise by muniID
-lcs_map_munis <- getLCs(map_munis)
-
-#convert cell counts to areas (km2) and add state id
-map_areas_munis <- lcs_map_munis %>%
-  mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
-  mutate(LC2area = round(LC2 * NonNAs) * 25) %>%
-  mutate(LC3area = round(LC3 * NonNAs) * 25) %>%
-  mutate(LC4area = round(LC4 * NonNAs) * 25) %>%
-  mutate(LC5area = round(LC5 * NonNAs) * 25) %>%
-  mutate(state = substr(muniID, 1, 2))
-
-#drop original cell-count columns (work with area km2 from now on)
-map_areas_munis <- map_areas_munis %>% dplyr::select(-LC1, -LC2, -LC3, -LC4, -LC5, -NonNAs, -NAs)
-
-#summarise muni areas to state level
-map_areas <- map_areas_munis %>%
-  group_by(state) %>%
-  dplyr::summarise_at(vars(LC1area:LC5area),sum, na.rm=T) %>%  #use _at so state is not summarised
-  mutate_if(is.character, as.integer)
-
-#gather to long format for union below
-map_areas <- map_areas %>%
-  gather(key = LCa, value = area, -state)
-
-#recode LCs for union below
-map_areas <- map_areas %>%
-  mutate(LC = if_else(LCa == "LC1area", 1, 
-    if_else(LCa == "LC2area", 2,
-    if_else(LCa == "LC3area", 3,
-    if_else(LCa == "LC4area", 4,
-    if_else(LCa == "LC5area", 5, 0)
-    )))))
-
-#add source variable for plotting below (re-order to match map table for union below)
-map_areas <- map_areas %>%
-  dplyr::select(-LCa) %>%
-  mutate(source = "Map") %>%
-  dplyr::select(state, LC, source, area)
-      
 ```
 
 
-Summarise MapBiomas data to the states we are simulating
+Loop over years
+
 ```{r}
+yrls <- seq(2000,2005,1)
 
-#filter to get only the states we want
-mb_areas <- mb_data %>%
-  filter(Estados == "TOCANTINS" | 
-      Estados == "BAHIA" |
-      Estados == "MINAS GERAIS" |
-      Estados == "SÃO PAULO" |
-      Estados == "PARANÁ" |
-      Estados == "SANTA CATARINA" |
-      Estados == "RIO GRANDE DO SUL" |
-      Estados == "MATO GROSSO DO SUL" |
-      Estados == "MATO GROSSO" |
-      Estados == "GOIÁS")
+for(i in seq_along(yrls)){
 
-#add state column containing state ids
-mb_areas <- mb_areas %>%
-  mutate(state = if_else(Estados == "TOCANTINS", 17, 
-    if_else(Estados == "BAHIA", 29,
-    if_else(Estados == "MINAS GERAIS", 31,
-    if_else(Estados == "SÃO PAULO", 35,
-    if_else(Estados == "PARANÁ", 41,
-    if_else(Estados == "SANTA CATARINA", 42,
-    if_else(Estados == "RIO GRANDE DO SUL", 43, 
-    if_else(Estados == "MATO GROSSO DO SUL", 50, 
-    if_else(Estados == "MATO GROSSO", 51,
-    if_else(Estados == "GOIÁS", 52, 0
-    ))))))))))
-  )
-
-    
-#select only columns we want    
-mb_areas <- mb_areas %>%
-  dplyr::select(state, `2000`, `Classe Nivel 3`) %>% 
-  dplyr::rename(area = `2000`)
-
-#because there is no consistency between land cover labels
-legenda = c("Forest Formations"=1, "Natural Forest Formations"=2, "Dense Forest"=3, "Savanna Formations"=4, "Mangroves"=5,"Forest Plantations"=9, "Non-Forest Natural Formations"=10, "Non Forest Wetlands"=11, "Grasslands"=12, "Other Non Forest Natural Formations"=13, "Farming"=14, "Pasture"=15, "Agriculture"=18, "Agriculture or Pasture"=21, "Non-Vegetated Areas"=22, "Dunes and Beaches"=23, "Urban Infrastructure"=24,"Other Non-Vegetated Area"=25,"Water Bodies"=26, "Non-Observed"=27)
-
-#recode to values (which match the map)
-mb_areas <- mb_areas %>%
-  mutate(LC = recode(`Classe Nivel 3`, !!!legenda))
-
-#use the classification values from above to relassify land covers
-mb_areas$LC <- plyr::mapvalues(mb_areas$LC, from=as.numeric(classification$X__1), to=as.numeric(classification$X__2))
-
-#calculate total LC area by state
-mb_areas <- mb_areas %>%
-  group_by(state, LC) %>%
-  dplyr::summarise_at(vars(area),sum, na.rm=T) 
-
-#round to integer
-mb_areas <- mb_areas %>%
-  mutate(area_km2 = round(area,0))
-
-#add source variable for plotting below (re-order to match map table for union below)
-mb_areas <- mb_areas %>%
-  dplyr::select(-area) %>%
-  mutate(source = "MB") %>%
-  rename(area = area_km2) %>%
-  dplyr::select(state, LC, source, area)
+  print(yrls[i])
   
+  map <- raster(paste0("ASCII/brazillc_",yrls[i],"_5km_int.txt"))
 
+  map <- reclassify(map, rcl=as.matrix(classification))
+  plot(map, col=c("green", "pink", "yellow", "grey", "brown"))
+  
+  
+  #extract cell values to table format
+  map.t <- extractXYZ(map, addCellID = F)
+  map.t <- as.data.frame(map.t)
+  map.t <- plyr::rename(map.t, c("vals" = "map"))
 
-```
+  #so need to join 
+  map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row" = "row", "col" = "col"))
 
+  #now summarise by muniID
+  lcs_map_munis <- getLCs(map_munis)
 
-Finally, join the MapBiomas data to the map data
-```{r}
+  #convert cell counts to areas (km2) and add state id
+  map_areas_munis <- lcs_map_munis %>%
+    mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
+    mutate(LC2area = round(LC2 * NonNAs) * 25) %>%
+    mutate(LC3area = round(LC3 * NonNAs) * 25) %>%
+    mutate(LC4area = round(LC4 * NonNAs) * 25) %>%
+    mutate(LC5area = round(LC5 * NonNAs) * 25) %>%
+    mutate(state = substr(muniID, 1, 2))
 
-CData <- union_all(map_areas, mb_areas)
+  #drop original cell-count columns (work with area km2 from now on)
+  map_areas_munis <- map_areas_munis %>% dplyr::select(-LC1, -LC2, -LC3, -LC4, -LC5, -NonNAs, -NAs)
 
-#relabel states to characters
-CData <- CData %>%
-  mutate(state = if_else(state == 17, "TO", 
-    if_else(state == 29, "BA",
-    if_else(state == 31, "MG",
-    if_else(state == 35, "SP",
-    if_else(state == 41, "PR",
-    if_else(state == 42, "SC",
-    if_else(state == 43, "RS", 
-    if_else(state == 50, "MS",
-    if_else(state == 51, "MT",
-    if_else(state == 52, "GO", "NA"
-    ))))))))))
-  )
+  #summarise muni areas to state level
+  map_areas <- map_areas_munis %>%
+    group_by(state) %>%
+    dplyr::summarise_at(vars(LC1area:LC5area),sum, na.rm=T) %>%  #use _at so state is not summarised
+    mutate_if(is.character, as.integer)
 
-#relabel LCs to characters
-CData <- CData %>%
-  mutate(LC = if_else(LC == 1, "Nature", 
-    if_else(LC == 2, "OtherAgri",
-    if_else(LC == 3, "Agri",
-    if_else(LC == 4, "Other",
-    if_else(LC == 5, "Pasture", "NA"
-    )))))
-  )
+  #gather to long format for union below
+  map_areas <- map_areas %>%
+    gather(key = LCa, value = area, -state)
+  
+  #recode LCs for union below
+  map_areas <- map_areas %>%
+    mutate(LC = if_else(LCa == "LC1area", 1, 
+      if_else(LCa == "LC2area", 2,
+      if_else(LCa == "LC3area", 3,
+      if_else(LCa == "LC4area", 4,
+      if_else(LCa == "LC5area", 5, 0)
+      )))))
 
-#filter (remove) missing LCs
+  #add source variable for plotting below (re-order to match map table for union below)
+  map_areas <- map_areas %>%
+    dplyr::select(-LCa) %>%
+    mutate(source = "Map") %>%
+    dplyr::select(state, LC, source, area)
+
+  ###Summarise MapBiomas data to the states we are simulating
+
+  #filter to get only the states we want
+  mb_areas <- mb_data %>%
+    filter(Estados == "TOCANTINS" | 
+        Estados == "BAHIA" |
+        Estados == "MINAS GERAIS" |
+        Estados == "SÃO PAULO" |
+        Estados == "PARANÁ" |
+        Estados == "SANTA CATARINA" |
+        Estados == "RIO GRANDE DO SUL" |
+        Estados == "MATO GROSSO DO SUL" |
+        Estados == "MATO GROSSO" |
+        Estados == "GOIÁS")
+  
+  #add state column containing state ids
+  mb_areas <- mb_areas %>%
+    mutate(state = if_else(Estados == "TOCANTINS", 17, 
+      if_else(Estados == "BAHIA", 29,
+      if_else(Estados == "MINAS GERAIS", 31,
+      if_else(Estados == "SÃO PAULO", 35,
+      if_else(Estados == "PARANÁ", 41,
+      if_else(Estados == "SANTA CATARINA", 42,
+      if_else(Estados == "RIO GRANDE DO SUL", 43, 
+      if_else(Estados == "MATO GROSSO DO SUL", 50, 
+      if_else(Estados == "MATO GROSSO", 51,
+      if_else(Estados == "GOIÁS", 52, 0
+      ))))))))))
+    )
+  
+  !need to think about what tables to include year in...
+  !change needed here to access the year
+  
+  #select only columns we want    
+  mb_areas <- mb_areas %>%
+    dplyr::select(state, `2000`, `Classe Nivel 3`) %>% 
+    dplyr::rename(area = `2000`)
+  
+  #because there is no consistency between land cover labels
+  legenda = c("Forest Formations"=1, "Natural Forest Formations"=2, "Dense Forest"=3, "Savanna Formations"=4, "Mangroves"=5,"Forest Plantations"=9, "Non-Forest Natural Formations"=10, "Non Forest Wetlands"=11, "Grasslands"=12, "Other Non Forest Natural Formations"=13, "Farming"=14, "Pasture"=15, "Agriculture"=18, "Agriculture or Pasture"=21, "Non-Vegetated Areas"=22, "Dunes and Beaches"=23, "Urban Infrastructure"=24,"Other Non-Vegetated Area"=25,"Water Bodies"=26, "Non-Observed"=27)
+  
+  #recode to values (which match the map)
+  mb_areas <- mb_areas %>%
+    mutate(LC = recode(`Classe Nivel 3`, !!!legenda))
+  
+  #use the classification values from above to relassify land covers
+  mb_areas$LC <- plyr::mapvalues(mb_areas$LC, from=as.numeric(classification$X__1), to=as.numeric(classification$X__2))
+  
+  #calculate total LC area by state
+  mb_areas <- mb_areas %>%
+    group_by(state, LC) %>%
+    dplyr::summarise_at(vars(area),sum, na.rm=T) 
+  
+  #round to integer
+  mb_areas <- mb_areas %>%
+    mutate(area_km2 = round(area,0))
+  
+  #add source variable for plotting below (re-order to match map table for union below)
+  mb_areas <- mb_areas %>%
+    dplyr::select(-area) %>%
+    mutate(source = "MB") %>%
+    rename(area = area_km2) %>%
+    dplyr::select(state, LC, source, area)
+    
+
+  CData <- union_all(map_areas, mb_areas)
+
+  #relabel states to characters
+  CData <- CData %>%
+    mutate(state = if_else(state == 17, "TO", 
+      if_else(state == 29, "BA",
+      if_else(state == 31, "MG",
+      if_else(state == 35, "SP",
+      if_else(state == 41, "PR",
+      if_else(state == 42, "SC",
+      if_else(state == 43, "RS", 
+      if_else(state == 50, "MS",
+      if_else(state == 51, "MT",
+      if_else(state == 52, "GO", "NA"
+      ))))))))))
+    )
+  
+  #relabel LCs to characters
+  CData <- CData %>%
+    mutate(LC = if_else(LC == 1, "Nature", 
+      if_else(LC == 2, "OtherAgri",
+      if_else(LC == 3, "Agri",
+      if_else(LC == 4, "Other",
+      if_else(LC == 5, "Pasture", "NA"
+      )))))
+    )
+  
+  #filter (remove) missing LCs
   CData <- CData %>%
     dplyr::filter(area > 0)
 
 
-```
-
-##Plotting
-```{r}
-
-
-
-ggplot(CData, aes(x=source, y=area, fill=LC)) + 
-  geom_bar(stat="identity", colour="white", position = "fill") +
-  scale_y_continuous(labels = percent_format()) +
-  facet_grid(.~state) +
-  xlab("Data Source")+ylab("Percentage")
-
-ggplot(CData, aes(x=source, y=area, fill=LC)) + 
-  geom_bar(stat="identity", colour="white") +
-  facet_grid(.~state) +
-  xlab("Data Source")+ylab("Area km2")
+  ggplot(CData, aes(x=source, y=area, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "fill") +
+    scale_y_continuous(labels = percent_format()) +
+    facet_grid(.~state) +
+    xlab("Data Source")+ylab("Percentage")
+  
+  ggplot(CData, aes(x=source, y=area, fill=LC)) + 
+    geom_bar(stat="identity", colour="white") +
+    facet_grid(.~state) +
+    xlab("Data Source")+ylab("Area km2")
 
 
-```
 
-###Quantitative Differences
-```{r}
+  ###Quantitative Differences
+  CDataW <- CData %>%
+    mutate(sourceLC = paste0(source, LC)) %>%
+    dplyr::select(-source, -LC) %>%
+    spread(key = c(sourceLC), value = area) %>%
+    dplyr::select(state, starts_with("Map"), starts_with("MB"))
+    
+  kable(CDataW)
+  
+  #it may be that in a given classification some LCs may not exist. so to calculate summarise we need to do some dplyr programming
+  
+  #get the names of LCs that exist in this classification in a list
+  d <- unlist(distinct(CData, LC), use.names=F)
+  
+  #iterate over the list of LC names
+  #mustate lines with help from https://stackoverflow.com/a/26003971 and https://stackoverflow.com/a/44622499
+  for(j in seq_along(d)){
+    CDataW <- CDataW %>%
+      mutate(!!paste0(d[j],"AbsDiffc") := .data[[paste0("MB",d[j])]] - .data[[paste0("Map",d[j])]]) %>%
+      mutate(!!paste0(d[j],"PropDiffc") := round(.data[[paste0(d[j],"AbsDiffc")]] / .data[[paste0("MB",d[j])]],3)) 
+  }
 
-CDataW <- CData %>%
-  mutate(sourceLC = paste0(source, LC)) %>%
-  dplyr::select(-source, -LC) %>%
-  spread(key = c(sourceLC), value = area) %>%
-  dplyr::select(state, starts_with("Map"), starts_with("MB"))
+  ###Absolute Differences
+  abs <- CDataW %>%
+    dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("PropDiffc"))
+  
+  kable(abs)
+  
+  abs <- abs %>%
+    gather(key = LC, value = area, -state)
+  
+  ggplot(abs, aes(x=state, y=area, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    xlab("Data Source")+ylab("Abs Diff km2")
 
-kable(CDataW)
+  ###Proportional Diferences
+  prop <- CDataW %>%
+    dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("AbsDiffc")) 
+  
+  kable(prop)
+  
+  prop <- prop %>%
+    gather(key = LC, value = area, -state)
+  
+  ggplot(prop, aes(x=state, y=area, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    xlab("Data Source")+ylab("Prop Diff")
 
-#it may be that in a given classification some LCs may not exist. so to calculate summarise we need to do some dplyr programming
+  ##All States
+  SDataW <- CData %>%
+    mutate(sourceState = paste(source, state, sep=" ")) %>%
+    dplyr::select(-source, -state) %>%
+    spread(key = c(sourceState), value = area)
+  
+  #following with help from https://stackoverflow.com/a/42015507
+  SDataW <- SDataW %>%
+    mutate(MapTotal = rowSums(.[grep("Map", names(.))], na.rm =TRUE)) %>%
+    mutate(MBTotal = rowSums(.[grep("MB", names(.))], na.rm =TRUE)) %>%
+    dplyr::select(LC, MapTotal, MBTotal) %>%
+    mutate(AbsDiffc = MBTotal - MapTotal) %>%
+    mutate(PropDiffc = round(AbsDiffc / MBTotal,3))
+  
+  Stotals <- SDataW %>%
+    dplyr::select(-AbsDiffc, -PropDiffc) %>%
+    gather(key = source, value = area, -LC)
+  
+  ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "fill") +
+    scale_y_continuous(labels = percent_format()) +
+    xlab("Data Source")+ylab("Percentage")
+  
+  ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
+    geom_bar(stat="identity", colour="white") +
+    xlab("Data Source")+ylab("Area km2")
+  
+  ggplot(SDataW , aes(x=LC, y=AbsDiffc)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    xlab("Data Source")+ylab("Abs Diff")
+  
+  ggplot(SDataW , aes(x=LC, y=PropDiffc)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    xlab("Data Source")+ylab("Prop Diff")
+  
+  MBTotalArea = sum(SDataW$MBTotal)
+  MapTotalArea = sum(SDataW$MapTotal)
+  ADiffc = MBTotalArea - MapTotalArea
+  PDiffc = ADiffc / MBTotalArea
+  
+  SDataW <- rbind(SDataW, c('Total', MapTotalArea, MBTotalArea, ADiffc, round(PDiffc,3)))
+  
+  kable(SDataW)
+  
+  
+  
+  
+  #last thing to do in the classifications loop is save the tables to a list
+  CData_ls[[i]] <- CData
+  CDataW_ls[[i]] <- CDataW
+  SDataW_ls[[i]] <- SDataW
+  Stotals_ls[[i]] <- Stotals
 
-#get the names of LCs that exist in this classification in a list
-d <- unlist(distinct(CData, LC), use.names=F)
-
-#iterate over the list of LC names
-#mustate lines with help from https://stackoverflow.com/a/26003971 and https://stackoverflow.com/a/44622499
-for(j in seq_along(d)){
-  CDataW <- CDataW %>%
-    mutate(!!paste0(d[j],"AbsDiffc") := .data[[paste0("MB",d[j])]] - .data[[paste0("Map",d[j])]]) %>%
-    mutate(!!paste0(d[j],"PropDiffc") := round(.data[[paste0(d[j],"AbsDiffc")]] / .data[[paste0("MB",d[j])]],3)) 
 }
 
 ```
 
-###Absolute Differences
-```{r}
-abs <- CDataW %>%
-  dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("PropDiffc"))
-
-kable(abs)
-
-abs <- abs %>%
-  gather(key = LC, value = area, -state)
-
-ggplot(abs, aes(x=state, y=area, fill=LC)) + 
-  geom_bar(stat="identity", colour="white", position = "dodge") +
-  xlab("Data Source")+ylab("Abs Diff km2")
-```
-
-###Proportional Diferences
-```{r}
-
-prop <- CDataW %>%
-  dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("AbsDiffc")) 
-
-kable(prop)
-
-prop <- prop %>%
-  gather(key = LC, value = area, -state)
-
-ggplot(prop, aes(x=state, y=area, fill=LC)) + 
-  geom_bar(stat="identity", colour="white", position = "dodge") +
-  xlab("Data Source")+ylab("Prop Diff")
-
-
-```
-
-##All States
-```{r}
-
-SDataW <- CData %>%
-  mutate(sourceState = paste(source, state, sep=" ")) %>%
-  dplyr::select(-source, -state) %>%
-  spread(key = c(sourceState), value = area)
-
-#following with help from https://stackoverflow.com/a/42015507
-SDataW <- SDataW %>%
-  mutate(MapTotal = rowSums(.[grep("Map", names(.))], na.rm =TRUE)) %>%
-  mutate(MBTotal = rowSums(.[grep("MB", names(.))], na.rm =TRUE)) %>%
-  dplyr::select(LC, MapTotal, MBTotal) %>%
-  mutate(AbsDiffc = MBTotal - MapTotal) %>%
-  mutate(PropDiffc = round(AbsDiffc / MBTotal,3))
-
-Stotals <- SDataW %>%
-  dplyr::select(-AbsDiffc, -PropDiffc) %>%
-  gather(key = source, value = area, -LC)
-
-ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
-  geom_bar(stat="identity", colour="white", position = "fill") +
-  scale_y_continuous(labels = percent_format()) +
-  xlab("Data Source")+ylab("Percentage")
-
-ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
-  geom_bar(stat="identity", colour="white") +
-  xlab("Data Source")+ylab("Area km2")
-
-ggplot(SDataW , aes(x=LC, y=AbsDiffc)) + 
-  geom_bar(stat="identity", colour="white", position = "dodge") +
-  xlab("Data Source")+ylab("Abs Diff")
-
-ggplot(SDataW , aes(x=LC, y=PropDiffc)) + 
-  geom_bar(stat="identity", colour="white", position = "dodge") +
-  xlab("Data Source")+ylab("Prop Diff")
-
-MBTotalArea = sum(SDataW$MBTotal)
-MapTotalArea = sum(SDataW$MapTotal)
-ADiffc = MBTotalArea - MapTotalArea
-PDiffc = ADiffc / MBTotalArea
-
-SDataW <- rbind(SDataW, c('Total', MapTotalArea, MBTotalArea, ADiffc, round(PDiffc,3)))
-
-kable(SDataW)
-```
-
+Now need code here to save all data tables to a list of data tables. 
 
 
 ##Clean up
