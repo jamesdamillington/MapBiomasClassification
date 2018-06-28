@@ -392,20 +392,12 @@ ggplot(SDataW , aes(x=LC, y=PropDiffc)) +
 
 MBTotalArea = sum(SDataW$MBTotal)
 MapTotalArea = sum(SDataW$MapTotal)
+ADiffc = MBTotalArea - MapTotalArea
+PDiffc = ADiffc / MBTotalArea
+
+SDataW <- rbind(SDataW, c('Total', MapTotalArea, MBTotalArea, ADiffc, round(PDiffc,3)))
 
 kable(SDataW)
-```
-
-There seems to be a consistent difference in the _total_ area between MapBiomas data and our map data:
-
-MB Total Area: `r MBTotalArea`
-Map Total Area: `r MapTotalArea`
-Difference: `r MapTotalArea - MBTotalArea`
-
-```{r}
-
-
-
 ```
 
 

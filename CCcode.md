@@ -296,7 +296,7 @@ ggplot(CData, aes(x=source, y=area, fill=LC)) +
 
 ![](CCcode_files/figure-html/unnamed-chunk-10-2.png)<!-- -->
 
-##Quantitative Differences
+###Quantitative Differences
 
 ```r
 CDataW <- CData %>%
@@ -337,7 +337,7 @@ CDataW <- CDataW %>%
   mutate(PasturePropDiffc = round(PastureAbsDiffc / `MB Pasture`,3)) 
 ```
 
-##Absolute Differences
+###Absolute Differences
 
 ```r
 abs <- CDataW %>%
@@ -372,7 +372,7 @@ ggplot(abs, aes(x=state, y=area, fill=LC)) +
 
 ![](CCcode_files/figure-html/unnamed-chunk-12-1.png)<!-- -->
 
-##Proportional Diferences
+###Proportional Diferences
 
 ```r
 prop <- CDataW %>%
@@ -406,6 +406,80 @@ ggplot(prop, aes(x=state, y=area, fill=LC)) +
 ```
 
 ![](CCcode_files/figure-html/unnamed-chunk-13-1.png)<!-- -->
+
+##All States
+
+```r
+SDataW <- CData %>%
+  mutate(sourceState = paste(source, state, sep=" ")) %>%
+  dplyr::select(-source, -state) %>%
+  spread(key = c(sourceState), value = area)
+
+#following with help from https://stackoverflow.com/a/42015507
+SDataW <- SDataW %>%
+  mutate(MapTotal = rowSums(.[grep("Map", names(.))], na.rm =TRUE)) %>%
+  mutate(MBTotal = rowSums(.[grep("MB", names(.))], na.rm =TRUE)) %>%
+  dplyr::select(LC, MapTotal, MBTotal) %>%
+  mutate(AbsDiffc = MBTotal - MapTotal) %>%
+  mutate(PropDiffc = round(AbsDiffc / MBTotal,3))
+
+Stotals <- SDataW %>%
+  dplyr::select(-AbsDiffc, -PropDiffc) %>%
+  gather(key = source, value = area, -LC)
+
+ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white", position = "fill") +
+  scale_y_continuous(labels = percent_format()) +
+  xlab("Data Source")+ylab("Percentage")
+```
+
+![](CCcode_files/figure-html/unnamed-chunk-14-1.png)<!-- -->
+
+```r
+ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white") +
+  xlab("Data Source")+ylab("Area km2")
+```
+
+![](CCcode_files/figure-html/unnamed-chunk-14-2.png)<!-- -->
+
+```r
+ggplot(SDataW , aes(x=LC, y=AbsDiffc)) + 
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  xlab("Data Source")+ylab("Abs Diff")
+```
+
+![](CCcode_files/figure-html/unnamed-chunk-14-3.png)<!-- -->
+
+```r
+ggplot(SDataW , aes(x=LC, y=PropDiffc)) + 
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  xlab("Data Source")+ylab("Prop Diff")
+```
+
+![](CCcode_files/figure-html/unnamed-chunk-14-4.png)<!-- -->
+
+```r
+MBTotalArea = sum(SDataW$MBTotal)
+MapTotalArea = sum(SDataW$MapTotal)
+ADiffc = MBTotalArea - MapTotalArea
+PDiffc = ADiffc / MBTotalArea
+
+SDataW <- rbind(SDataW, c('Total', MapTotalArea, MBTotalArea, ADiffc, round(PDiffc,3)))
+
+kable(SDataW)
+```
+
+
+
+LC           MapTotal   MBTotal   AbsDiffc   PropDiffc 
+-----------  ---------  --------  ---------  ----------
+Agri         142425     135122    -7303      -0.054    
+Nature       1592250    1508529   -83721     -0.055    
+Other        63450      76261     12811      0.168     
+Other Agri   674350     816139    141789     0.174     
+Pasture      1602175    1314181   -287994    -0.219    
+Total        4074650    3850232   -224418    -0.058    
 
 
 
