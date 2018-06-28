@@ -237,9 +237,7 @@ mb_areas <- mb_areas %>%
   rename(area = area_km2) %>%
   dplyr::select(state, LC, source, area)
   
-#mb_areas <- mb_areas %>%
-#  spread(LC, area_km2) %>%
-#  rename(MB1 = `1`, MB2 = `2`, MB3 = `3`, MB4 = `4`, MB5 = `5`)
+
 
 ```
 
@@ -267,12 +265,16 @@ CData <- CData %>%
 #relabel LCs to characters
 CData <- CData %>%
   mutate(LC = if_else(LC == 1, "Nature", 
-    if_else(LC == 2, "Other Agri",
+    if_else(LC == 2, "OtherAgri",
     if_else(LC == 3, "Agri",
     if_else(LC == 4, "Other",
     if_else(LC == 5, "Pasture", "NA"
     )))))
   )
+
+#filter (remove) missing LCs
+  CData <- CData %>%
+    dplyr::filter(area > 0)
 
 
 ```
@@ -300,24 +302,26 @@ ggplot(CData, aes(x=source, y=area, fill=LC)) +
 ```{r}
 
 CDataW <- CData %>%
-  mutate(sourceLC = paste(source, LC, sep=" ")) %>%
+  mutate(sourceLC = paste0(source, LC)) %>%
   dplyr::select(-source, -LC) %>%
   spread(key = c(sourceLC), value = area) %>%
-  dplyr::select(state, `Map Agri`, `MB Agri`, `Map Nature`, `MB Nature`, `Map Other`, `MB Other`, `Map Other Agri`, `MB Other Agri`, `Map Pasture`, `MB Pasture`)
+  dplyr::select(state, starts_with("Map"), starts_with("MB"))
 
 kable(CDataW)
 
-CDataW <- CDataW %>%
-  mutate(NatureAbsDiffc = `MB Nature` - `Map Nature`) %>%
-  mutate(NaturePropDiffc = round(NatureAbsDiffc / `MB Nature`,3)) %>% 
-  mutate(OAAbsDiffc = `MB Other Agri` - `Map Other Agri`) %>%
-  mutate(OAPropDiffc = round(OAAbsDiffc / `MB Other Agri`,3)) %>% 
-  mutate(AgriAbsDiffc = `MB Agri` - `Map Agri`) %>%
-  mutate(AgriPropDiffc = round(AgriAbsDiffc / `MB Agri`,3)) %>% 
-  mutate(OtherAbsDiffc = `MB Other` - `Map Other`) %>%
-  mutate(OtherPropDiffc = round(OtherAbsDiffc / `MB Other`,3)) %>% 
-  mutate(PastureAbsDiffc = `MB Pasture` - `Map Pasture`) %>%
-  mutate(PasturePropDiffc = round(PastureAbsDiffc / `MB Pasture`,3)) 
+#it may be that in a given classification some LCs may not exist. so to calculate summarise we need to do some dplyr programming
+
+#get the names of LCs that exist in this classification in a list
+d <- unlist(distinct(CData, LC), use.names=F)
+
+#iterate over the list of LC names
+#mustate lines with help from https://stackoverflow.com/a/26003971 and https://stackoverflow.com/a/44622499
+for(j in seq_along(d)){
+  CDataW <- CDataW %>%
+    mutate(!!paste0(d[j],"AbsDiffc") := .data[[paste0("MB",d[j])]] - .data[[paste0("Map",d[j])]]) %>%
+    mutate(!!paste0(d[j],"PropDiffc") := round(.data[[paste0(d[j],"AbsDiffc")]] / .data[[paste0("MB",d[j])]],3)) 
+}
+
 ```
 
 ###Absolute Differences
