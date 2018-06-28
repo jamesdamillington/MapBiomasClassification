@@ -353,6 +353,61 @@ ggplot(prop, aes(x=state, y=area, fill=LC)) +
 
 ```
 
+##All States
+```{r}
+
+SDataW <- CData %>%
+  mutate(sourceState = paste(source, state, sep=" ")) %>%
+  dplyr::select(-source, -state) %>%
+  spread(key = c(sourceState), value = area)
+
+#following with help from https://stackoverflow.com/a/42015507
+SDataW <- SDataW %>%
+  mutate(MapTotal = rowSums(.[grep("Map", names(.))], na.rm =TRUE)) %>%
+  mutate(MBTotal = rowSums(.[grep("MB", names(.))], na.rm =TRUE)) %>%
+  dplyr::select(LC, MapTotal, MBTotal) %>%
+  mutate(AbsDiffc = MBTotal - MapTotal) %>%
+  mutate(PropDiffc = round(AbsDiffc / MBTotal,3))
+
+Stotals <- SDataW %>%
+  dplyr::select(-AbsDiffc, -PropDiffc) %>%
+  gather(key = source, value = area, -LC)
+
+ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white", position = "fill") +
+  scale_y_continuous(labels = percent_format()) +
+  xlab("Data Source")+ylab("Percentage")
+
+ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white") +
+  xlab("Data Source")+ylab("Area km2")
+
+ggplot(SDataW , aes(x=LC, y=AbsDiffc)) + 
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  xlab("Data Source")+ylab("Abs Diff")
+
+ggplot(SDataW , aes(x=LC, y=PropDiffc)) + 
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  xlab("Data Source")+ylab("Prop Diff")
+
+MBTotalArea = sum(SDataW$MBTotal)
+MapTotalArea = sum(SDataW$MapTotal)
+
+kable(SDataW)
+```
+
+There seems to be a consistent difference in the _total_ area between MapBiomas data and our map data:
+
+MB Total Area: `r MBTotalArea`
+Map Total Area: `r MapTotalArea`
+Difference: `r MapTotalArea - MBTotalArea`
+
+```{r}
+
+
+
+```
+
 
 
 ##Clean up
