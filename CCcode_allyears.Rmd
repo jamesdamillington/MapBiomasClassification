@@ -5,7 +5,7 @@ output:
     keep_md: yes
 ---
 
-This script analyses one year for a single classification
+This script analyses all years for a single classification
 
 ##Load Libraries
 ```{r warning=F, message=F}
