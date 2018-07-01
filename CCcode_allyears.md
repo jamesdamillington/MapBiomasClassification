@@ -8,20 +8,19 @@ output:
 This script analyses all years for a single classification
 
 ##Load Libraries
-```{r warning=F, message=F}
 
+```r
 rm(list=ls())
 library(tidyverse)
 library(raster)
 library(readxl)
 library(scales)
 library(knitr)
-
 ```
 
 ##Functions
-```{r}
 
+```r
 #raster to xyz  (with help from https://stackoverflow.com/a/19847419)
 #sepcify input raster, whether nodata cells should be output, whether a unique cell ID should be added
 #return is a matrix. note format is row (Y) then col (X)
@@ -59,14 +58,12 @@ getLCs <- function(data)
 
   return(LCs)
 }
-
-
 ```
 
 
 
-```{r}
 
+```r
 unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip")  # unzip all file 
 
 
@@ -76,7 +73,25 @@ classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = cs
 
   
 mb_data <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 Municipios.csv")  
+```
 
+```
+## Parsed with column specification:
+## cols(
+##   .default = col_double(),
+##   Municípios = col_character(),
+##   Estados = col_character(),
+##   `Classe Nivel 1` = col_character(),
+##   `Classe Nivel 2` = col_character(),
+##   `Classe Nivel 3` = col_character()
+## )
+```
+
+```
+## See spec(...) for full column specifications.
+```
+
+```r
 unzip(zipfile="sim10_BRmunis_latlon_5km_2018-04-27.zip",files="sim10_BRmunis_latlon_5km_2018-04-27.asc",exdir="ASCII")  # unzip file 
 munis.r <- raster("ASCII/sim10_BRmunis_latlon_5km_2018-04-27.asc")  #do this with zip file
 
@@ -84,14 +99,14 @@ munis.r <- raster("ASCII/sim10_BRmunis_latlon_5km_2018-04-27.asc")  #do this wit
 munis.t <- extractXYZ(munis.r, addCellID = F)
 munis.t <- as.data.frame(munis.t)
 munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
-
 ```
 
-**Classification is** `r print(csheet)`
+**Classification is** 
 
 Loop over years creating CData table for all years
 
-```{r}
+
+```r
 yrls <- seq(2000,2002,1)
 
 for(i in seq_along(yrls)){
@@ -265,11 +280,41 @@ for(i in seq_along(yrls)){
 }  
 ```
 
+```
+## [1] 2000
+```
+
+```
+## The following `from` values were not present in `x`: 2, 3, 10, 14
+```
+
+![](CCcode_allyears_files/figure-html/unnamed-chunk-4-1.png)<!-- -->
+
+```
+## [1] 2001
+```
+
+```
+## The following `from` values were not present in `x`: 2, 3, 10, 14
+```
+
+![](CCcode_allyears_files/figure-html/unnamed-chunk-4-2.png)<!-- -->
+
+```
+## [1] 2002
+```
+
+```
+## The following `from` values were not present in `x`: 2, 3, 10, 14
+```
+
+![](CCcode_allyears_files/figure-html/unnamed-chunk-4-3.png)<!-- -->
+
 
 Plot areas by state for a given year
 
-```{r}  
 
+```r
 yr <- 2000
 
 #filter (remove) missing LCs
@@ -283,18 +328,24 @@ ggplot(CData_yr, aes(x=source, y=area, fill=LC)) +
   facet_grid(.~state) +
   xlab("Data Source")+ylab("Percentage") +
   ggtitle(yr)
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
+
+```r
 ggplot(CData_yr, aes(x=source, y=area, fill=LC)) + 
   geom_bar(stat="identity", colour="white") +
   facet_grid(.~state) +
   xlab("Data Source")+ylab("Area km2") +
   ggtitle(yr)
-
 ```
+
+![](CCcode_allyears_files/figure-html/unnamed-chunk-5-2.png)<!-- -->
 
 
 Plot areas by year for a given state
-```{r}
+
+```r
 st <- "TO"
 
 #filter (remove) missing LCs
@@ -308,18 +359,23 @@ ggplot(CData_st, aes(x=source, y=area, fill=LC)) +
   facet_grid(.~year) +
   xlab("Data Source")+ylab("Percentage") +
   ggtitle(st)
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
+
+```r
 ggplot(CData_st, aes(x=source, y=area, fill=LC)) + 
   geom_bar(stat="identity", colour="white") +
   facet_grid(.~year) +
   xlab("Data Source")+ylab("Area km2") +
   ggtitle(st)
-
 ```
 
-Differences by year for a given state
-```{r}
+![](CCcode_allyears_files/figure-html/unnamed-chunk-6-2.png)<!-- -->
 
+Differences by year for a given state
+
+```r
 st <- "TO"
 
 #filter (remove) missing LCs
@@ -335,7 +391,17 @@ CData_st <- CData %>%
     dplyr::select(year, starts_with("Map"), starts_with("MB"))
     
   kable(CDataW)
-  
+```
+
+
+
+ year   MapAgri   MapNature   MapOther   MapOtherAgri   MapPasture   MBAgri   MBNature   MBOther   MBOtherAgri   MBPasture
+-----  --------  ----------  ---------  -------------  -----------  -------  ---------  --------  ------------  ----------
+ 2000        75      205600       2025          15200        60925      166     185541      3759         34786       52944
+ 2001       275      202825       1900          14325        64500      331     184671      3657         33801       54736
+ 2002       550      202175       2725          12975        65400      511     184122      4203         32230       56129
+
+```r
   #it may be that in a given classification some LCs may not exist. so to calculate summarise we need to do some dplyr programming
   
   #get the names of LCs that exist in this classification in a list
@@ -354,7 +420,17 @@ CData_st <- CData %>%
     dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("PropDiffc"))
   
   kable(abs)
-  
+```
+
+
+
+ year   NatureAbsDiffc   OtherAgriAbsDiffc   AgriAbsDiffc   OtherAbsDiffc   PastureAbsDiffc
+-----  ---------------  ------------------  -------------  --------------  ----------------
+ 2000           -20059               19586             91            1734             -7981
+ 2001           -18154               19476             56            1757             -9764
+ 2002           -18053               19255            -39            1478             -9271
+
+```r
   abs <- abs %>%
     gather(key = LC, value = area, -year)
   
@@ -362,13 +438,27 @@ CData_st <- CData %>%
     geom_bar(stat="identity", colour="white", position = "dodge") +
     xlab("Data Source")+ylab("Abs Diff km2") +
     ggtitle(st)
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-7-1.png)<!-- -->
+
+```r
   ###Proportional Diferences
   prop <- CDataW %>%
     dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("AbsDiffc")) 
   
   kable(prop)
-  
+```
+
+
+
+ year   NaturePropDiffc   OtherAgriPropDiffc   AgriPropDiffc   OtherPropDiffc   PasturePropDiffc
+-----  ----------------  -------------------  --------------  ---------------  -----------------
+ 2000            -0.108                0.563           0.548            0.461             -0.151
+ 2001            -0.098                0.576           0.169            0.480             -0.178
+ 2002            -0.098                0.597          -0.076            0.352             -0.165
+
+```r
   prop <- prop %>%
     gather(key = LC, value = area, -year)
   
@@ -378,10 +468,13 @@ CData_st <- CData %>%
     ggtitle(st)
 ```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-7-2.png)<!-- -->
+
 
 All states for all years
 
-```{r}
+
+```r
 ##All States
 SDataW <- CData %>%
   mutate(sourceState = paste(source, state, sep=" ")) %>%
@@ -405,27 +498,41 @@ ggplot(Stotals, aes(x=source, y=area, fill=LC)) +
   facet_grid(.~year) +
   scale_y_continuous(labels = percent_format()) +
   xlab("Data Source")+ylab("Percentage")
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+
+```r
 ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
   geom_bar(stat="identity", colour="white") +
   facet_grid(.~year) +
   xlab("Data Source")+ylab("Area km2")
 ```
 
-```{r}
+![](CCcode_allyears_files/figure-html/unnamed-chunk-8-2.png)<!-- -->
 
+
+```r
 ggplot(SDataW , aes(x=LC, y=AbsDiffc, fill=LC)) + 
   geom_bar(stat="identity", colour="white", position = "dodge") +
   facet_grid(.~year) +
   xlab("")+ylab("Abs Diff") +
   theme(axis.text.x = element_blank())
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
+
+```r
 ggplot(SDataW , aes(x=LC, y=PropDiffc, fill=LC)) + 
   geom_bar(stat="identity", colour="white", position = "dodge") +
   facet_grid(.~year) +
   xlab("")+ylab("Prop Diff") +
   theme(axis.text.x = element_blank())
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-9-2.png)<!-- -->
+
+```r
 MBTotalArea = sum(SDataW$MBTotal) 
 MapTotalArea = sum(SDataW$MapTotal) 
 ADiffc = MBTotalArea - MapTotalArea
@@ -434,15 +541,56 @@ PDiffc = ADiffc / MBTotalArea
 SDataW <- bind_rows(SDataW, list(LC = 'Total', MapTotal = MapTotalArea, MBTotal = MBTotalArea, AbsDiffc = ADiffc, PropDiffc = round(PDiffc,3)))
 
 summary(SDataW)
-
-kable(SDataW)
+```
 
 ```
+##       LC                 year         MapTotal           MBTotal        
+##  Length:16          Min.   :2000   Min.   :   62725   Min.   :   75831  
+##  Class :character   1st Qu.:2000   1st Qu.:  196275   1st Qu.:  171759  
+##  Mode  :character   Median :2001   Median :  661362   Median :  803554  
+##                     Mean   :2001   Mean   : 1527994   Mean   : 1443837  
+##                     3rd Qu.:2002   3rd Qu.: 1403331   3rd Qu.: 1191303  
+##                     Max.   :2002   Max.   :12223950   Max.   :11550694  
+##                     NA's   :1                                           
+##     AbsDiffc         PropDiffc       
+##  Min.   :-673256   Min.   :-0.27700  
+##  1st Qu.:-143680   1st Qu.:-0.17025  
+##  Median : -33314   Median :-0.05150  
+##  Mean   : -84157   Mean   :-0.02475  
+##  3rd Qu.:  12885   3rd Qu.: 0.16900  
+##  Max.   : 142595   Max.   : 0.18000  
+## 
+```
+
+```r
+kable(SDataW)
+```
+
+
+
+LC           year   MapTotal    MBTotal   AbsDiffc   PropDiffc
+----------  -----  ---------  ---------  ---------  ----------
+Agri         2000     142425     135122      -7303      -0.054
+Agri         2001     214225     183971     -30254      -0.164
+Agri         2002     228725     192352     -36373      -0.189
+Nature       2000    1967225    1861438    -105787      -0.057
+Nature       2001    1923950    1834532     -89418      -0.049
+Nature       2002    1903225    1827182     -76043      -0.042
+Other        2000      63450      76261      12811       0.168
+Other        2001      62725      75831      13106       0.173
+Other        2002      65725      78283      12558       0.160
+OtherAgri    2000     674350     816139     141789       0.174
+OtherAgri    2001     648375     790970     142595       0.180
+OtherAgri    2002     640275     773071     132796       0.172
+Pasture      2000    1227200     961270    -265930      -0.277
+Pasture      2001    1225375     964929    -260446      -0.270
+Pasture      2002    1236700     979343    -257357      -0.263
+Total          NA   12223950   11550694    -673256      -0.058
 
 Adjust areas by systematic difference between MB and Map
 
-```{r}
 
+```r
 TotalArea <- SDataW %>% 
   dplyr::filter(LC != "Total") %>%
   group_by(year) %>%
@@ -473,30 +621,55 @@ ggplot(Stotals_Adj, aes(x=source, y=area, fill=LC)) +
   geom_bar(stat="identity", colour="white") +
   facet_grid(.~year) +
   xlab("Data Source")+ylab("Area km2")
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
+
+```r
 ggplot(SDataW_Adj, aes(x=LC, y=AbsDiffc, fill=LC)) + 
   geom_bar(stat="identity", colour="white", position = "dodge") +
   facet_grid(.~year) +
   xlab("")+ylab("Abs Diff") +
   theme(axis.text.x = element_blank())
+```
 
+![](CCcode_allyears_files/figure-html/unnamed-chunk-10-2.png)<!-- -->
 
+```r
 MBTotalArea_Adj = sum(SDataW_Adj$MBTotal) 
 MapTotalArea_Adj = sum(SDataW_Adj$MapTotal) 
 ADiffc_Adj = MBTotalArea_Adj - MapTotalArea_Adj
 PDiffc_Adj = ADiffc_Adj / MBTotalArea_Adj
 
-SDataW_Adj <- bind_rows(SDataW_Adj, list(LC = 'Total', MapTotal = round(MapTotalArea_Adj,0), MBTotal = MBTotalArea_Adj, AbsDiffc = round(ADiffc_Adj,3), PropDiffc = round(PDiffc_Adj,3)))
-
+SDataW_Adj <- rbind(SDataW_Adj, c('Total', 0000, round(MapTotalArea_Adj,0), MBTotalArea_Adj, round(ADiffc_Adj,3), round(PDiffc_Adj,3)))
 
 kable(SDataW_Adj)
-
 ```
 
 
+
+LC          year   MapTotal   MBTotal    AbsDiffc   PropDiffc 
+----------  -----  ---------  ---------  ---------  ----------
+Agri        2000   134581     135122     541        0.004     
+Agri        2001   202426     183971     -18455     -0.1      
+Agri        2002   216128     192352     -23776     -0.124    
+Nature      2000   1858877    1861438    2561       0.001     
+Nature      2001   1817985    1834532    16547      0.009     
+Nature      2002   1798401    1827182    28781      0.016     
+Other       2000   59955      76261      16306      0.214     
+Other       2001   59270      75831      16561      0.218     
+Other       2002   62105      78283      16178      0.207     
+OtherAgri   2000   637209     816139     178930     0.219     
+OtherAgri   2001   612665     790970     178305     0.225     
+OtherAgri   2002   605011     773071     168060     0.217     
+Pasture     2000   1159610    961270     -198340    -0.206    
+Pasture     2001   1157885    964929     -192956    -0.2      
+Pasture     2002   1168587    979343     -189244    -0.193    
+Total       0      11550695   11550694   -1         0         
+
+
 ##Clean up
-```{r}
 
+```r
 unlink("ASCII", recursive = T) #delete ASCII directory created above
-
 ```
