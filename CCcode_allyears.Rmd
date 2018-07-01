@@ -65,9 +65,6 @@ getLCs <- function(data)
 
 
 
-
-
-
 ```{r}
 
 unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip")  # unzip all file 
@@ -89,10 +86,10 @@ munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
 ```
 
 
-Loop over years
+Loop over years creating CData table for all years
 
 ```{r}
-yrls <- seq(2000,2005,1)
+yrls <- seq(2000,2015,1)
 
 for(i in seq_along(yrls)){
 
@@ -182,13 +179,13 @@ for(i in seq_along(yrls)){
       ))))))))))
     )
   
-  !need to think about what tables to include year in...
-  !change needed here to access the year
+  #!need to think about what tables to include year in...
+  #!change needed here to access the year
   
   #select only columns we want    
   mb_areas <- mb_areas %>%
-    dplyr::select(state, `2000`, `Classe Nivel 3`) %>% 
-    dplyr::rename(area = `2000`)
+    dplyr::select(state, paste0(yrls[i]), `Classe Nivel 3`) %>% 
+    dplyr::rename(area = paste0(yrls[i]))
   
   #because there is no consistency between land cover labels
   legenda = c("Forest Formations"=1, "Natural Forest Formations"=2, "Dense Forest"=3, "Savanna Formations"=4, "Mangroves"=5,"Forest Plantations"=9, "Non-Forest Natural Formations"=10, "Non Forest Wetlands"=11, "Grasslands"=12, "Other Non Forest Natural Formations"=13, "Farming"=14, "Pasture"=15, "Agriculture"=18, "Agriculture or Pasture"=21, "Non-Vegetated Areas"=22, "Dunes and Beaches"=23, "Urban Infrastructure"=24,"Other Non-Vegetated Area"=25,"Water Bodies"=26, "Non-Observed"=27)
@@ -216,11 +213,12 @@ for(i in seq_along(yrls)){
     rename(area = area_km2) %>%
     dplyr::select(state, LC, source, area)
     
-
-  CData <- union_all(map_areas, mb_areas)
+  
+  #create CData table just for this year
+  CData_yr <- union_all(map_areas, mb_areas)
 
   #relabel states to characters
-  CData <- CData %>%
+  CData_yr <- CData_yr %>%
     mutate(state = if_else(state == 17, "TO", 
       if_else(state == 29, "BA",
       if_else(state == 31, "MG",
@@ -235,7 +233,7 @@ for(i in seq_along(yrls)){
     )
   
   #relabel LCs to characters
-  CData <- CData %>%
+  CData_yr <- CData_yr %>%
     mutate(LC = if_else(LC == 1, "Nature", 
       if_else(LC == 2, "OtherAgri",
       if_else(LC == 3, "Agri",
@@ -244,23 +242,77 @@ for(i in seq_along(yrls)){
       )))))
     )
   
-  #filter (remove) missing LCs
-  CData <- CData %>%
-    dplyr::filter(area > 0)
-
-
-  ggplot(CData, aes(x=source, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white", position = "fill") +
-    scale_y_continuous(labels = percent_format()) +
-    facet_grid(.~state) +
-    xlab("Data Source")+ylab("Percentage")
   
-  ggplot(CData, aes(x=source, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white") +
-    facet_grid(.~state) +
-    xlab("Data Source")+ylab("Area km2")
+  #add year column
+  CData_yr <- CData_yr %>%
+    mutate(year = yrls[i])
+  
+  
+  #union CData for years here.
+  #if first iteration of loop create the tibble
+  if(i == 1){
+      CData <- CData_yr
+  }
+    
+  #else join data to tibble (by creating another tibble, then join (ensure rows are not lost)
+  else {
+      CData <- union_all(CData, CData_yr)
+  }
+  
+}  
+```
 
 
+Plot areas by state for a given year
+
+```{r}  
+
+yr <- 2000
+
+#filter (remove) missing LCs
+CData_yr <- CData %>%
+  dplyr::filter(year == yr) %>%
+  dplyr::filter(area > 0)
+
+ggplot(CData_yr, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white", position = "fill") +
+  scale_y_continuous(labels = percent_format()) +
+  facet_grid(.~state) +
+  xlab("Data Source")+ylab("Percentage") +
+  ggtitle(yr)
+
+ggplot(CData_yr, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white") +
+  facet_grid(.~state) +
+  xlab("Data Source")+ylab("Area km2") +
+  ggtitle(yr)
+
+```
+
+
+Plot areas by year for a given state
+```{r}
+st <- "TO"
+
+#filter (remove) missing LCs
+CData_st <- CData %>%
+  dplyr::filter(state == st) %>%
+  dplyr::filter(area > 0)
+
+ggplot(CData_st, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white", position = "fill") +
+  scale_y_continuous(labels = percent_format()) +
+  facet_grid(.~year) +
+  xlab("Data Source")+ylab("Percentage") +
+  ggtitle(st)
+
+ggplot(CData_st, aes(x=source, y=area, fill=LC)) + 
+  geom_bar(stat="identity", colour="white") +
+  facet_grid(.~year) +
+  xlab("Data Source")+ylab("Area km2") +
+  ggtitle(st)
+
+```
 
   ###Quantitative Differences
   CDataW <- CData %>%
@@ -363,7 +415,7 @@ for(i in seq_along(yrls)){
   SDataW_ls[[i]] <- SDataW
   Stotals_ls[[i]] <- Stotals
 
-}
+
 
 ```
 
