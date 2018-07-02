@@ -10,7 +10,7 @@ output:
 
 This script (will eventually) analyses all years for multiple classifications
 
-```{r echo=F, warning=F, message=F}
+```{r warning=F, message=F}
 
 rm(list=ls())
 library(tidyverse)
@@ -23,7 +23,7 @@ library(cowplot)     #useful for ggplotting
 
 ```
 
-```{r echo=F, warning=F, message=F}
+```{r warning=F, message=F}
 
 #raster to xyz  (with help from https://stackoverflow.com/a/19847419)
 #sepcify input raster, whether nodata cells should be output, whether a unique cell ID should be added
@@ -95,19 +95,21 @@ yrls <- seq(2000,2002,1)
 
 Loop over classifications and years
 
-```{r}
+```{r warning=F, message=F}
 
 #lists to hold data tables 
 CData_ls <- vector('list', length(cls))
 CDataW_ls <- vector('list', length(cls))
 SDataW_ls <- vector('list', length(cls))
 Stotals_ls <- vector('list', length(cls))
+SDataW_Adj_ls <- vector('list', length(cls))
 mapStack_ls <- vector('list', length(cls))
 
 names(CData_ls) <- cls
 names(CDataW_ls) <- cls
 names(SDataW_ls) <- cls
 names(Stotals_ls) <- cls
+names(SDataW_Adj_ls) <- cls
 names(mapStack_ls) <- cls
 
 #loop over classifications
@@ -121,7 +123,7 @@ for(i in seq_along(cls)){
   #loop over years  
   for(j in seq_along(yrls)){
 
-  print(paste0("Classification: ",cls[i],", Year: ",yrls[j]))
+  #print(paste0("Classification: ",cls[i],", Year: ",yrls[j]))
   
   map <- raster(paste0("ASCII/brazillc_",yrls[j],"_5km_int.txt"))
   map <- reclassify(map, rcl=as.matrix(classification))
@@ -308,7 +310,7 @@ for(i in seq_along(cls)){
 ```
 
 ##Maps
-```{r warning=F, message=F}
+```{r fig.width=12, warning=F, message=F}
 
 #use loop instead of lapply to construct approproate palette
 for(i in seq_along(mapStack_ls)){
@@ -320,78 +322,20 @@ for(i in seq_along(mapStack_ls)){
   if(4 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'gray') }
   if(5 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'darkolivegreen') }
   
-  print(cls[i])
-  print(rasterVis::levelplot(mapStack_ls[[i]], pretty=T,att = 'landcover', col.regions=clabs))
+  #rint(cls[i])
+  print(rasterVis::levelplot(mapStack_ls[[i]], pretty=T,att = 'landcover', col.regions=clabs), main=cls[i])
   
 }
 
 ```
 
-```{r}
+##All states for all years by classification
+```{r warning=F, message=F}
 
-  ggplot(CData, aes(x=source, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white", position = "fill") +
-    scale_y_continuous(labels = percent_format()) +
-    facet_grid(.~state) +
-    xlab("Data Source")+ylab("Percentage")
-  
-  ggplot(CData, aes(x=source, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white") +
-    facet_grid(.~state) +
-    xlab("Data Source")+ylab("Area km2")
-
-
-
-  ###Quantitative Differences
-  CDataW <- CData %>%
-    mutate(sourceLC = paste0(source, LC)) %>%
-    dplyr::select(-source, -LC) %>%
-    spread(key = c(sourceLC), value = area) %>%
-    dplyr::select(state, starts_with("Map"), starts_with("MB"))
-    
-  kable(CDataW)
-  
-  #it may be that in a given classification some LCs may not exist. so to calculate summarise we need to do some dplyr programming
-  
-  #get the names of LCs that exist in this classification in a list
-  d <- unlist(distinct(CData, LC), use.names=F)
-  
-  #iterate over the list of LC names
-  #mustate lines with help from https://stackoverflow.com/a/26003971 and https://stackoverflow.com/a/44622499
-  for(j in seq_along(d)){
-    CDataW <- CDataW %>%
-      mutate(!!paste0(d[j],"AbsDiffc") := .data[[paste0("MB",d[j])]] - .data[[paste0("Map",d[j])]]) %>%
-      mutate(!!paste0(d[j],"PropDiffc") := round(.data[[paste0(d[j],"AbsDiffc")]] / .data[[paste0("MB",d[j])]],3)) 
-  }
-
-  ###Absolute Differences
-  abs <- CDataW %>%
-    dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("PropDiffc"))
-  
-  kable(abs)
-  
-  abs <- abs %>%
-    gather(key = LC, value = area, -state)
-  
-  ggplot(abs, aes(x=state, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white", position = "dodge") +
-    xlab("Data Source")+ylab("Abs Diff km2")
-
-  ###Proportional Diferences
-  prop <- CDataW %>%
-    dplyr::select(-starts_with("MB"), -starts_with("Map"), -ends_with("AbsDiffc")) 
-  
-  kable(prop)
-  
-  prop <- prop %>%
-    gather(key = LC, value = area, -state)
-  
-  ggplot(prop, aes(x=state, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white", position = "dodge") +
-    xlab("Data Source")+ylab("Prop Diff")
+for(i in seq_along(cls)){
 
   ##All States
-  SDataW <- CData %>%
+  SDataW <- CData_ls[[i]] %>%
     mutate(sourceState = paste(source, state, sep=" ")) %>%
     dplyr::select(-source, -state) %>%
     spread(key = c(sourceState), value = area)
@@ -400,54 +344,154 @@ for(i in seq_along(mapStack_ls)){
   SDataW <- SDataW %>%
     mutate(MapTotal = rowSums(.[grep("Map", names(.))], na.rm =TRUE)) %>%
     mutate(MBTotal = rowSums(.[grep("MB", names(.))], na.rm =TRUE)) %>%
-    dplyr::select(LC, MapTotal, MBTotal) %>%
+    dplyr::select(LC, year, MapTotal, MBTotal) %>%
     mutate(AbsDiffc = MBTotal - MapTotal) %>%
     mutate(PropDiffc = round(AbsDiffc / MBTotal,3))
   
   Stotals <- SDataW %>%
     dplyr::select(-AbsDiffc, -PropDiffc) %>%
-    gather(key = source, value = area, -LC)
+    gather(key = source, value = area, -LC, -year)
   
-  ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white", position = "fill") +
-    scale_y_continuous(labels = percent_format()) +
-    xlab("Data Source")+ylab("Percentage")
-  
-  ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
-    geom_bar(stat="identity", colour="white") +
-    xlab("Data Source")+ylab("Area km2")
-  
-  ggplot(SDataW , aes(x=LC, y=AbsDiffc)) + 
-    geom_bar(stat="identity", colour="white", position = "dodge") +
-    xlab("Data Source")+ylab("Abs Diff")
-  
-  ggplot(SDataW , aes(x=LC, y=PropDiffc)) + 
-    geom_bar(stat="identity", colour="white", position = "dodge") +
-    xlab("Data Source")+ylab("Prop Diff")
-  
-  MBTotalArea = sum(SDataW$MBTotal)
-  MapTotalArea = sum(SDataW$MapTotal)
-  ADiffc = MBTotalArea - MapTotalArea
-  PDiffc = ADiffc / MBTotalArea
-  
-  SDataW <- rbind(SDataW, c('Total', MapTotalArea, MBTotalArea, ADiffc, round(PDiffc,3)))
-  
-  kable(SDataW)
-  
-  
-  
-  
-  #last thing to do in the classifications loop is save the tables to a list
-  CData_ls[[i]] <- CData
-  CDataW_ls[[i]] <- CDataW
   SDataW_ls[[i]] <- SDataW
   Stotals_ls[[i]] <- Stotals
+}
+```
 
+```{r fig.width=12, warning=F, message=F}
 
+for(i in seq_along(cls)){
+  
+  clabs <- c("Agri" = 'orange2', "Nature" ='forestgreen', "Other"='gray', "OtherAgri"='wheat1', "Pasture"='darkolivegreen')
+  
+  p1 <- ggplot(Stotals_ls[[i]], aes(x=source, y=area, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "fill") +
+    scale_fill_manual(values=clabs) +
+    facet_grid(.~year) +
+    scale_y_continuous(labels = percent_format()) +
+    xlab("Data Source")+ylab("Percentage") +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    ggtitle(cls[i])
+  
+  p2 <- ggplot(Stotals_ls[[i]], aes(x=source, y=area, fill=LC)) + 
+    scale_fill_manual(values=clabs) +
+    geom_bar(stat="identity", colour="white") +
+    scale_y_continuous(labels = comma_format()) +
+    labs(x=expression(Data~Source),y=expression(Area~km^{2})) +
+    facet_grid(.~year) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    ggtitle(cls[i])
+  
+  print(p1)
+  print(p2)
+}
 
 ```
 
-Now need code here to save all data tables to a list of data tables. 
+```{r fig.width=12, warning=F, message=F}
+
+for(i in seq_along(cls)){
+  
+  clabs <- c("Agri" = 'orange2', "Nature" ='forestgreen', "Other"='gray', "OtherAgri"='wheat1', "Pasture"='darkolivegreen')
+  
+  p1 <- ggplot(SDataW_ls[[i]], aes(x=LC, y=AbsDiffc, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    scale_fill_manual(values=clabs) +
+    scale_y_continuous(labels = comma_format()) +
+    facet_grid(.~year) +
+    xlab("")+ylab("Abs Diff") +
+    theme(axis.text.x = element_blank()) +
+    ggtitle(cls[i])
+  
+  p2 <- ggplot(SDataW_ls[[i]], aes(x=LC, y=PropDiffc, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    scale_fill_manual(values=clabs) +
+    facet_grid(.~year) +
+    xlab("")+ylab("Prop Diff") +
+    theme(axis.text.x = element_blank()) +
+    ggtitle(cls[i])
+  
+  print(p1)
+  print(p2)
+  
+  MBTotalArea = sum(SDataW_ls[[i]]$MBTotal) 
+  MapTotalArea = sum(SDataW_ls[[i]]$MapTotal) 
+  ADiffc = MBTotalArea - MapTotalArea
+  PDiffc = ADiffc / MBTotalArea
+  
+  SDataW_ls[[i]] <- bind_rows(SDataW_ls[[i]], list(LC = 'Total', MapTotal = MapTotalArea, MBTotal = MBTotalArea, AbsDiffc = ADiffc, PropDiffc = round(PDiffc,3)))
+
+  print(kable(SDataW_ls[[i]]))
+}
+
+```
+
+##Adjusted
+
+Adjust areas by systematic difference between MB and Map
+```{r fig.width=12, warning=F, message=F}
+
+for(i in seq_along(cls)){
+  
+  TotalArea <- SDataW_ls[[i]] %>% 
+    dplyr::filter(LC != "Total") %>%
+    group_by(year) %>%
+    dplyr::summarise_at(vars(MapTotal, MBTotal),sum, na.rm=T) %>%
+    mutate(prop = MBTotal / MapTotal)
+  
+  adj <- mean(TotalArea$prop)
+  
+  ##All States
+  SDataW_Adj <- CData_ls[[i]] %>%
+    mutate(sourceState = paste(source, state, sep=" ")) %>%
+    dplyr::select(-source, -state) %>%
+    spread(key = c(sourceState), value = area)
+  
+  #following with help from https://stackoverflow.com/a/42015507
+  SDataW_Adj <- SDataW_Adj %>%
+    mutate(MapTotal = round(adj * rowSums(.[grep("Map", names(.))], na.rm =TRUE),0)) %>%
+    mutate(MBTotal = rowSums(.[grep("MB", names(.))], na.rm =TRUE)) %>%
+    dplyr::select(LC, year, MapTotal, MBTotal) %>%
+    mutate(AbsDiffc = MBTotal - MapTotal) %>%
+    mutate(PropDiffc = round(AbsDiffc / MBTotal,3))
+  
+  Stotals_Adj <- SDataW_Adj %>%
+    dplyr::select(-AbsDiffc, -PropDiffc) %>%
+    gather(key = source, value = area, -LC, -year)
+  
+  p1 <- ggplot(Stotals_Adj, aes(x=source, y=area, fill=LC)) +
+    scale_fill_manual(values=clabs) + 
+    geom_bar(stat="identity", colour="white") +
+    scale_y_continuous(labels = comma_format()) +
+    facet_grid(.~year) +
+    labs(x=expression(Data~Source),y=expression(Area~km^{2})) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    ggtitle(cls[i])
+  
+  p2 <- ggplot(SDataW_Adj, aes(x=LC, y=AbsDiffc, fill=LC)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    scale_fill_manual(values=clabs) +
+    facet_grid(.~year) +
+    xlab("")+ylab("Abs Diff") +
+    theme(axis.text.x = element_blank()) +
+    ggtitle(cls[i])
+  
+  print(p1)
+  print(p2)
+  
+  MBTotalArea_Adj = sum(SDataW_Adj$MBTotal) 
+  MapTotalArea_Adj = sum(SDataW_Adj$MapTotal) 
+  ADiffc_Adj = MBTotalArea_Adj - MapTotalArea_Adj
+  PDiffc_Adj = ADiffc_Adj / MBTotalArea_Adj
+  
+  SDataW_Adj <- bind_rows(SDataW_Adj, list(LC = 'Total', MapTotal = round(MapTotalArea_Adj,0), MBTotal = MBTotalArea_Adj, AbsDiffc = round(ADiffc_Adj,3), PropDiffc = round(PDiffc_Adj,3)))
+  
+  print(kable(SDataW_Adj))
+  
+  SDataW_Adj_ls[[i]] <- SDataW_Adj
+}
+
+```
+
 
 
 ##Clean up

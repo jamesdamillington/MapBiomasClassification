@@ -337,6 +337,7 @@ for(st in stls){
 
 ```{r eval=F, echo=F}
 
+#calc areas for each state
 #don't run this for now
 
 st <- "TO"
