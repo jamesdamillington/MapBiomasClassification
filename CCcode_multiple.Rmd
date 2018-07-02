@@ -1,5 +1,7 @@
 ---
-title: "MapBiomasClassification"
+title: "MapBiomas Classification - Multiple"
+author: "James D.A. Millington"
+date: "July 2018"
 output: 
   html_document: 
     keep_md: yes
@@ -7,20 +9,20 @@ output:
 
 This script (will eventually) analyses all years for multiple classifications
 
-##Load Libraries
-```{r warning=F, message=F}
+```{r echo=F, warning=F, message=F}
 
 rm(list=ls())
 library(tidyverse)
 library(raster)
-library(readxl)
-library(scales)
+library(readxl)      #for reading Excel sheets
+library(scales)      #useful for ggplotting
 library(knitr)
+library(rasterVis)   #more useful raster plotting
+library(cowplot)     #useful for ggplotting
 
 ```
 
-##Functions
-```{r}
+```{r echo=F, warning=F, message=F}
 
 #raster to xyz  (with help from https://stackoverflow.com/a/19847419)
 #sepcify input raster, whether nodata cells should be output, whether a unique cell ID should be added
@@ -64,17 +66,10 @@ getLCs <- function(data)
 ```
 
 
-
-
-
-
 ```{r}
 
-unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip",files="ASCII/brazillc_2000_5km_int.txt")  # unzip file 
+unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip")  # unzip all files 
 
-map <- raster("ASCII/brazillc_2000_5km_int.txt") 
-plot(map) 
-  
 mb_data <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 Municipios.csv")  
 
 unzip(zipfile="sim10_BRmunis_latlon_5km_2018-04-27.zip",files="sim10_BRmunis_latlon_5km_2018-04-27.asc",exdir="ASCII")  # unzip file 
@@ -87,11 +82,20 @@ munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
 
 ```
 
-Specify classifications to examine (these should be the names of Sheets in the Classifications Excel file). 
+Specify classifications and years to examine. Classifications should be the names of Sheets in the Classifications Excel file. Years should be between 2000 and 2015 
 ```{r}
 
 #classifications to loop through 
 cls <- c("PastureA", "PastureB", "PastureC")
+
+yrls <- seq(2000,2002,1)
+mapStack <- stack()
+
+```
+
+Loop over classifications and years
+
+```{r}
 
 #lists to hold data tables 
 CData_ls <- vector('list', length(cls))
@@ -104,39 +108,51 @@ names(CDataW_ls) <- cls
 names(SDataW_ls) <- cls
 names(Stotals_ls) <- cls
 
-```
-
-Loop over classifications
-
-```{r}
 for(i in seq_along(cls)){
-
-  print(cls[i])
   
-  classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = cls[i], range="B2:C21", col_names=F)  
-
-  #####Create a summary table of classified map data for municipalities in states we are simulating.
+  classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = cls[i], range="B2:C21", col_names=F) 
   
-  if(i > 1)
-  {
-    map <- raster("ASCII/brazillc_2000_5km_int.txt") 
-    plot(map) 
-  }
-    
+  for(j in seq_along(yrls)){
+
+  print(paste0("Classification: ",cls[i],", Year: ",yrls[j]))
+  
+  map <- raster(paste0("ASCII/brazillc_",yrls[j],"_5km_int.txt"))
   map <- reclassify(map, rcl=as.matrix(classification))
-  plot(map, col=c("green", "pink", "yellow", "grey", "brown"))
+  
+  
+  #add categories for later plotting etc. (see https://stackoverflow.com/a/37214431)
+  map <- ratify(map)     #tell R that the map raster is categorical 
+  rat <- levels(map)[[1]]    #apply the levels (i.e. categories) 
+ 
+  #not all classes may be present after classification, so conditionally construct labels
+  labs <- c()
+  if(1 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Nature") }
+  if(2 %in% levels(map)[[1]]$ID) { labs <- c(labs, "OtherAgri") }
+  if(3 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Agriculture") }
+  if(4 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Other") }
+  if(5 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Pasture") }
+    
+  rat$landcover <- labs  
+  levels(map) <- rat 
+  
+  #add to mapStack for later plotting
+  mapStack <- stack(map, mapStack)
 
   #extract cell values to table format
   map.t <- extractXYZ(map, addCellID = F)
   map.t <- as.data.frame(map.t)
   map.t <- plyr::rename(map.t, c("vals" = "map"))
 
+  print("joining")
+  
   #so need to join 
   map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row" = "row", "col" = "col"))
 
   #now summarise by muniID
   lcs_map_munis <- getLCs(map_munis)
 
+  print("converting")
+  
   #convert cell counts to areas (km2) and add state id
   map_areas_munis <- lcs_map_munis %>%
     mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
@@ -207,8 +223,8 @@ for(i in seq_along(cls)){
       
   #select only columns we want    
   mb_areas <- mb_areas %>%
-    dplyr::select(state, `2000`, `Classe Nivel 3`) %>% 
-    dplyr::rename(area = `2000`)
+    dplyr::select(state, paste0(yrls[j]), `Classe Nivel 3`) %>% 
+    dplyr::rename(area = paste0(yrls[j]))
   
   #because there is no consistency between land cover labels
   legenda = c("Forest Formations"=1, "Natural Forest Formations"=2, "Dense Forest"=3, "Savanna Formations"=4, "Mangroves"=5,"Forest Plantations"=9, "Non-Forest Natural Formations"=10, "Non Forest Wetlands"=11, "Grasslands"=12, "Other Non Forest Natural Formations"=13, "Farming"=14, "Pasture"=15, "Agriculture"=18, "Agriculture or Pasture"=21, "Non-Vegetated Areas"=22, "Dunes and Beaches"=23, "Urban Infrastructure"=24,"Other Non-Vegetated Area"=25,"Water Bodies"=26, "Non-Observed"=27)
@@ -237,10 +253,10 @@ for(i in seq_along(cls)){
     dplyr::select(state, LC, source, area)
     
 
-  CData <- union_all(map_areas, mb_areas)
+  CData_yr <- union_all(map_areas, mb_areas)
 
   #relabel states to characters
-  CData <- CData %>%
+  CData_yr <- CData_yr %>%
     mutate(state = if_else(state == 17, "TO", 
       if_else(state == 29, "BA",
       if_else(state == 31, "MG",
@@ -255,7 +271,7 @@ for(i in seq_along(cls)){
     )
   
   #relabel LCs to characters
-  CData <- CData %>%
+  CData_yr <- CData_yr %>%
     mutate(LC = if_else(LC == 1, "Nature", 
       if_else(LC == 2, "OtherAgri",
       if_else(LC == 3, "Agri",
@@ -264,10 +280,28 @@ for(i in seq_along(cls)){
       )))))
     )
   
-  #filter (remove) missing LCs
-  CData <- CData %>%
-    dplyr::filter(area > 0)
+  #add year column
+  CData_yr <- CData_yr %>%
+    mutate(year = yrls[j])
+  
+  #union CData for years here.
+  #if first iteration of classification loop (re)create the tibble
+  if(j == 1){
+      CData <- CData_yr
+  }
+    
+  #else join data to tibble (by creating another tibble, then join (ensure rows are not lost)
+  else {
+      CData <- union_all(CData, CData_yr)
+  }
+  }
+  
+  CData_ls[[i]] <- CData
+}
 
+```
+
+```{r}
 
   ggplot(CData, aes(x=source, y=area, fill=LC)) + 
     geom_bar(stat="identity", colour="white", position = "fill") +
@@ -383,7 +417,7 @@ for(i in seq_along(cls)){
   SDataW_ls[[i]] <- SDataW
   Stotals_ls[[i]] <- Stotals
 
-}
+
 
 ```
 

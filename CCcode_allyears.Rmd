@@ -1,14 +1,18 @@
 ---
-title: "MapBiomasClassification"
+title: "MapBiomas Classification - All Years"
+author: "James D.A. Millington"
+date: "July 2018"
 output: 
   html_document: 
     keep_md: yes
+    code_folding: hide
+    
 ---
 
 This script analyses all years for a single classification
 
 
-```{r echo=F, warning=F, message=F}
+```{r warning=F, message=F}
 
 rm(list=ls())
 library(tidyverse)
@@ -23,7 +27,7 @@ library(cowplot)
 ```
 
 
-```{r echo=F, warning=F, message=F}
+```{r warning=F, message=F}
 
 #raster to xyz  (with help from https://stackoverflow.com/a/19847419)
 #sepcify input raster, whether nodata cells should be output, whether a unique cell ID should be added
@@ -93,7 +97,7 @@ munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
 **Classification is** `r csheet`
 
 
-```{r echo=F, warning=F, message=F}
+```{r warning=F, message=F}
 #Loop over years creating CData table for all years
 
 yrls <- seq(2000,2015,1)
@@ -275,7 +279,7 @@ for(i in seq_along(yrls)){
 ```
 
 ##Maps
-```{r echo=F, warning=F, message=F}
+```{r warning=F, message=F}
 
 names(mapStack) <- yrls
 rasterVis::levelplot(mapStack, pretty=T,att = 'landcover', col.regions=c('forestgreen','wheat1', 'orange2', 'gray', 'darkolivegreen'))  
