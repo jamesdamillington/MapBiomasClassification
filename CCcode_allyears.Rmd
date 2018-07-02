@@ -72,7 +72,7 @@ getLCs <- function(data)
 
 
 ##Load Data
-```{r}
+```{r warning=F, message=F}
 
 unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip")  # unzip all file 
 
@@ -279,18 +279,17 @@ for(i in seq_along(yrls)){
 ```
 
 ##Maps
-```{r warning=F, message=F}
+```{r fig.width=12, warning=F, message=F}
 
 names(mapStack) <- yrls
 rasterVis::levelplot(mapStack, pretty=T,att = 'landcover', col.regions=c('forestgreen','wheat1', 'orange2', 'gray', 'darkolivegreen'))  
 
 ```
 
-
-```{r eval=F, echo=F, warning=F, message=F}
+##Plots of areas by year for each state
+```{r fig.width=12, warning=F, message=F}
 
 #**Plots of areas by year for each state**
-#leave for now as makes very narrow bars
 
 stls <- c("TO", "BA", "MG", "SP", "PR", "SC", "RS", "MS", "MT", "GO")
 cols <- c("Agri" = 'orange2', "Nature" ='forestgreen', "Other"='gray', "OtherAgri"='wheat1', "Pasture"='darkolivegreen')
@@ -309,7 +308,7 @@ for(st in stls){
     facet_grid(.~year) +
     xlab("Data Source")+ylab("Percentage") +
     ggtitle(st) +
-    theme(axis.text.x = element_blank())
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
   
   P2 <- ggplot(CData_st, aes(x=source, y=area, fill=LC)) +
     scale_fill_manual(values=cols) +
@@ -318,7 +317,7 @@ for(st in stls){
     labs(x=expression(Data~Source),y=expression(Area~km^{2})) +
     facet_grid(.~year) +
     ggtitle(st) +
-    theme(axis.text.x = element_blank())
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
   
   #https://stackoverflow.com/a/44765950
   prow <- cowplot::plot_grid(
@@ -399,9 +398,8 @@ CData_st <- CData %>%
 ```
 
 
-**All states for all years**
-
-```{r echo=F, warning=F, message=F}
+##All states for all years
+```{r fig.width=12, warning=F, message=F}
 ##All States
 SDataW <- CData %>%
   mutate(sourceState = paste(source, state, sep=" ")) %>%
@@ -428,7 +426,7 @@ ggplot(Stotals, aes(x=source, y=area, fill=LC)) +
   facet_grid(.~year) +
   scale_y_continuous(labels = percent_format()) +
   xlab("Data Source")+ylab("Percentage") +
-    theme(axis.text.x = element_blank())
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 ggplot(Stotals, aes(x=source, y=area, fill=LC)) + 
   scale_fill_manual(values=cols) +
@@ -436,10 +434,10 @@ ggplot(Stotals, aes(x=source, y=area, fill=LC)) +
   scale_y_continuous(labels = comma_format()) +
   labs(x=expression(Data~Source),y=expression(Area~km^{2})) +
   facet_grid(.~year) +
-  theme(axis.text.x = element_blank())
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
-```{r echo=F, warning=F, message=F}
+```{r fig.width=12, warning=F, message=F}
 
 ggplot(SDataW , aes(x=LC, y=AbsDiffc, fill=LC)) + 
   geom_bar(stat="identity", colour="white", position = "dodge") +
@@ -447,14 +445,14 @@ ggplot(SDataW , aes(x=LC, y=AbsDiffc, fill=LC)) +
   scale_y_continuous(labels = comma_format()) +
   facet_grid(.~year) +
   xlab("")+ylab("Abs Diff") +
-  theme(axis.text.x = element_blank())
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 ggplot(SDataW , aes(x=LC, y=PropDiffc, fill=LC)) + 
   geom_bar(stat="identity", colour="white", position = "dodge") +
   scale_fill_manual(values=cols) +
   facet_grid(.~year) +
   xlab("")+ylab("Prop Diff") +
-  theme(axis.text.x = element_blank())
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
 MBTotalArea = sum(SDataW$MBTotal) 
 MapTotalArea = sum(SDataW$MapTotal) 
@@ -470,8 +468,7 @@ SDataW <- bind_rows(SDataW, list(LC = 'Total', MapTotal = MapTotalArea, MBTotal 
 ##Adjusted
 
 Adjust areas by systematic difference between MB and Map
-
-```{r echo=F, warning=F, message=F}
+```{r fig.width=12, warning=F, message=F}
 
 TotalArea <- SDataW %>% 
   dplyr::filter(LC != "Total") %>%
