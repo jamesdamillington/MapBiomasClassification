@@ -1,0 +1,504 @@
+---
+title: "MapBiomas Classification - Pasture Analysis"
+author: "James D.A. Millington"
+date: "July 2018"
+output: 
+  html_document: 
+    keep_md: yes
+    code_folding: hide
+---
+
+This script (will eventually) analyses all years for multiple classifications
+
+```{r warning=F, message=F}
+
+rm(list=ls())
+library(tidyverse)
+library(raster)
+library(readxl)      #for reading Excel sheets
+library(scales)      #useful for ggplotting
+library(knitr)
+library(rasterVis)   #more useful raster plotting
+library(cowplot)     #useful for ggplotting
+
+```
+
+```{r warning=F, message=F}
+
+#raster to xyz  (with help from https://stackoverflow.com/a/19847419)
+#sepcify input raster, whether nodata cells should be output, whether a unique cell ID should be added
+#return is a matrix. note format is row (Y) then col (X)
+extractXYZ <- function(raster, nodata = FALSE, addCellID = TRUE){
+  
+  vals <- raster::extract(raster, 1:ncell(raster))   #specify raster otherwise dplyr used
+  xys <- rowColFromCell(raster,1:ncell(raster))
+  combine <- cbind(xys,vals)
+  
+  if(addCellID){
+    combine <- cbind(1:length(combine[,1]), combine)
+  }
+  
+  if(!nodata){
+    combine <- combine[!rowSums(!is.finite(combine)),]  #from https://stackoverflow.com/a/15773560
+  }
+  
+  return(combine)
+}
+
+
+getLCs <- function(data)
+{
+  #calculates proportion of each LC in the muni (ignoring NAs, help from https://stackoverflow.com/a/44290753)
+  data %>%
+    group_by(muniID) %>%
+    dplyr::summarise(LC1 = round(sum(map == 1, na.rm = T) / sum(!is.na(map)), 3),
+                     LC2 = round(sum(map == 2, na.rm = T) / sum(!is.na(map)), 3),
+                     LC3 = round(sum(map == 3, na.rm = T) / sum(!is.na(map)), 3),
+                     LC4 = round(sum(map == 4, na.rm = T) / sum(!is.na(map)), 3),
+                     LC5 = round(sum(map == 5, na.rm = T) / sum(!is.na(map)), 3),
+                     NonNAs = sum(!is.na(map)),
+                     NAs = sum(is.na(map))
+    ) -> LCs
+
+  return(LCs)
+}
+
+
+```
+
+
+```{r results='hide', messages=F}
+
+unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip")  # unzip all files 
+
+mb_data <- read_csv("LandCover Data - MapBiomas - Collection 2.3 - 2018.01.04 Municipios.csv")  
+
+unzip(zipfile="sim10_BRmunis_latlon_5km_2018-04-27.zip",files="sim10_BRmunis_latlon_5km_2018-04-27.asc",exdir="ASCII")  # unzip file 
+munis.r <- raster("ASCII/sim10_BRmunis_latlon_5km_2018-04-27.asc")  #do this with zip file
+
+#extract cell values to table format
+munis.t <- extractXYZ(munis.r, addCellID = F)
+munis.t <- as.data.frame(munis.t)
+munis.t <- plyr::rename(munis.t, c("vals" = "muniID"))
+
+```
+
+Specify classifications and years to examine. Classifications should be the names of Sheets in the Classifications Excel file. Years should be between 2000 and 2015 
+```{r}
+
+#classifications to loop through 
+cls <- c("PastureA", "PastureB", "PastureC")
+
+yrls <- seq(2000,2015,1)
+
+```
+
+Loop over classifications and years
+
+```{r warning=F, message=F}
+
+#lists to hold data tables 
+CData_ls <- vector('list', length(cls))
+CDataW_ls <- vector('list', length(cls))
+SDataW_ls <- vector('list', length(cls))
+Stotals_ls <- vector('list', length(cls))
+SDataW_Adj_ls <- vector('list', length(cls))
+mapStack_ls <- vector('list', length(cls))
+
+names(CData_ls) <- cls
+names(CDataW_ls) <- cls
+names(SDataW_ls) <- cls
+names(Stotals_ls) <- cls
+names(SDataW_Adj_ls) <- cls
+names(mapStack_ls) <- cls
+
+#loop over classifications
+for(i in seq_along(cls)){
+  
+  classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = cls[i], range="B2:C21", col_names=F) 
+  
+  #reset mapStack for this Classification
+  mapStack <- stack()
+
+  #loop over years  
+  for(j in seq_along(yrls)){
+
+  #print(paste0("Classification: ",cls[i],", Year: ",yrls[j]))
+  
+  map <- raster(paste0("ASCII/brazillc_",yrls[j],"_5km_int.txt"))
+  map <- reclassify(map, rcl=as.matrix(classification))
+  
+  
+  #add categories for later plotting etc. (see https://stackoverflow.com/a/37214431)
+  map <- ratify(map)     #tell R that the map raster is categorical 
+  rat <- levels(map)[[1]]    #apply the levels (i.e. categories) 
+ 
+  #not all classes may be present after classification, so conditionally construct labels
+  labs <- c()
+  if(1 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Nature") }
+  if(2 %in% levels(map)[[1]]$ID) { labs <- c(labs, "OtherAgri") }
+  if(3 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Agriculture") }
+  if(4 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Other") }
+  if(5 %in% levels(map)[[1]]$ID) { labs <- c(labs, "Pasture") }
+    
+  rat$landcover <- labs  
+  levels(map) <- rat 
+  
+  #add to mapStack for later plotting
+  mapStack <- stack(map, mapStack)
+
+  #extract cell values to table format
+  map.t <- extractXYZ(map, addCellID = F)
+  map.t <- as.data.frame(map.t)
+  map.t <- plyr::rename(map.t, c("vals" = "map"))
+
+  #so need to join 
+  map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row" = "row", "col" = "col"))
+
+  #now summarise by muniID
+  lcs_map_munis <- getLCs(map_munis)
+
+  #convert cell counts to areas (km2) and add state id
+  map_areas_munis <- lcs_map_munis %>%
+    mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
+    mutate(LC2area = round(LC2 * NonNAs) * 25) %>%
+    mutate(LC3area = round(LC3 * NonNAs) * 25) %>%
+    mutate(LC4area = round(LC4 * NonNAs) * 25) %>%
+    mutate(LC5area = round(LC5 * NonNAs) * 25) %>%
+    mutate(state = substr(muniID, 1, 2))
+
+  #drop original cell-count columns (work with area km2 from now on)
+  map_areas_munis <- map_areas_munis %>% dplyr::select(-LC1, -LC2, -LC3, -LC4, -LC5, -NonNAs, -NAs)
+
+  #summarise muni areas to state level
+  map_areas <- map_areas_munis %>%
+    group_by(state) %>%
+    dplyr::summarise_at(vars(LC1area:LC5area),sum, na.rm=T) %>%  #use _at so state is not summarised
+    mutate_if(is.character, as.integer)
+
+  #gather to long format for union below
+  map_areas <- map_areas %>%
+    gather(key = LCa, value = area, -state)
+  
+  #recode LCs for union below
+  map_areas <- map_areas %>%
+    mutate(LC = if_else(LCa == "LC1area", 1, 
+      if_else(LCa == "LC2area", 2,
+      if_else(LCa == "LC3area", 3,
+      if_else(LCa == "LC4area", 4,
+      if_else(LCa == "LC5area", 5, 0)
+      )))))
+
+  #add source variable for plotting below (re-order to match map table for union below)
+  map_areas <- map_areas %>%
+    dplyr::select(-LCa) %>%
+    mutate(source = "Map") %>%
+    dplyr::select(state, LC, source, area)
+
+  ###Summarise MapBiomas data to the states we are simulating
+
+  #filter to get only the states we want
+  mb_areas <- mb_data %>%
+    filter(Estados == "TOCANTINS" | 
+        Estados == "BAHIA" |
+        Estados == "MINAS GERAIS" |
+        Estados == "SÃO PAULO" |
+        Estados == "PARANÁ" |
+        Estados == "SANTA CATARINA" |
+        Estados == "RIO GRANDE DO SUL" |
+        Estados == "MATO GROSSO DO SUL" |
+        Estados == "MATO GROSSO" |
+        Estados == "GOIÁS")
+  
+  #add state column containing state ids
+  mb_areas <- mb_areas %>%
+    mutate(state = if_else(Estados == "TOCANTINS", 17, 
+      if_else(Estados == "BAHIA", 29,
+      if_else(Estados == "MINAS GERAIS", 31,
+      if_else(Estados == "SÃO PAULO", 35,
+      if_else(Estados == "PARANÁ", 41,
+      if_else(Estados == "SANTA CATARINA", 42,
+      if_else(Estados == "RIO GRANDE DO SUL", 43, 
+      if_else(Estados == "MATO GROSSO DO SUL", 50, 
+      if_else(Estados == "MATO GROSSO", 51,
+      if_else(Estados == "GOIÁS", 52, 0
+      ))))))))))
+    )
+  
+      
+  #select only columns we want    
+  mb_areas <- mb_areas %>%
+    dplyr::select(state, paste0(yrls[j]), `Classe Nivel 3`) %>% 
+    dplyr::rename(area = paste0(yrls[j]))
+  
+  #because there is no consistency between land cover labels
+  legenda = c("Forest Formations"=1, "Natural Forest Formations"=2, "Dense Forest"=3, "Savanna Formations"=4, "Mangroves"=5,"Forest Plantations"=9, "Non-Forest Natural Formations"=10, "Non Forest Wetlands"=11, "Grasslands"=12, "Other Non Forest Natural Formations"=13, "Farming"=14, "Pasture"=15, "Agriculture"=18, "Agriculture or Pasture"=21, "Non-Vegetated Areas"=22, "Dunes and Beaches"=23, "Urban Infrastructure"=24,"Other Non-Vegetated Area"=25,"Water Bodies"=26, "Non-Observed"=27)
+  
+  #recode to values (which match the map)
+  mb_areas <- mb_areas %>%
+    mutate(LC = recode(`Classe Nivel 3`, !!!legenda))
+  
+  #use the classification values from above to relassify land covers
+  mb_areas$LC <- plyr::mapvalues(mb_areas$LC, from=as.numeric(classification$X__1), to=as.numeric(classification$X__2))
+  
+  #calculate total LC area by state
+  mb_areas <- mb_areas %>%
+    group_by(state, LC) %>%
+    dplyr::summarise_at(vars(area),sum, na.rm=T) 
+  
+  #round to integer
+  mb_areas <- mb_areas %>%
+    mutate(area_km2 = round(area,0))
+  
+  #add source variable for plotting below (re-order to match map table for union below)
+  mb_areas <- mb_areas %>%
+    dplyr::select(-area) %>%
+    mutate(source = "MB") %>%
+    rename(area = area_km2) %>%
+    dplyr::select(state, LC, source, area)
+    
+
+  CData_yr <- union_all(map_areas, mb_areas)
+
+  #relabel states to characters
+  CData_yr <- CData_yr %>%
+    mutate(state = if_else(state == 17, "TO", 
+      if_else(state == 29, "BA",
+      if_else(state == 31, "MG",
+      if_else(state == 35, "SP",
+      if_else(state == 41, "PR",
+      if_else(state == 42, "SC",
+      if_else(state == 43, "RS", 
+      if_else(state == 50, "MS",
+      if_else(state == 51, "MT",
+      if_else(state == 52, "GO", "NA"
+      ))))))))))
+    )
+  
+  #relabel LCs to characters
+  CData_yr <- CData_yr %>%
+    mutate(LC = if_else(LC == 1, "Nature", 
+      if_else(LC == 2, "OtherAgri",
+      if_else(LC == 3, "Agri",
+      if_else(LC == 4, "Other",
+      if_else(LC == 5, "Pasture", "NA"
+      )))))
+    )
+  
+  #add year column
+  CData_yr <- CData_yr %>%
+    mutate(year = yrls[j])
+  
+  #union CData for years here.
+  #if first iteration of classification loop (re)create the tibble
+  if(j == 1){
+      CData <- CData_yr
+  }
+    
+  #else join data to tibble (by creating another tibble, then join (ensure rows are not lost)
+  else {
+      CData <- union_all(CData, CData_yr)
+  }
+  }
+  
+  CData_ls[[i]] <- CData
+  
+  names(mapStack) <- yrls
+  mapStack_ls[[i]] <- mapStack
+}
+
+```
+
+##Pasture Area by state, year classification
+```{r eval=F, echo=F}
+
+#add classification lable to the CData tables
+for(i in seq_along(cls)){
+  
+  CData_ls[[i]] <- CData_ls[[i]] %>%
+    mutate(Class = cls[i])
+}
+
+#union the CData tables for the different classifications
+for(i in seq_along(cls)){
+  
+  if(i == 1) { CDataU <- CData_ls[[i]] }
+  else { CDataU <- dplyr::union(CDataU, CData_ls[[i]]) }
+}
+
+#filter to pasture only
+CData_Pas <- CDataU %>%
+  dplyr::filter(LC == "Pasture")
+```
+
+
+```{r fig.height=20, fig.width=12}
+
+CData_Pas %>% 
+  filter(source == "Map") %>%
+  ggplot(aes(x=Class, y=area, fill=Class)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    scale_y_continuous(name="Pasture Area km2", labels = scales::comma) +
+    facet_grid(year~state) +
+    xlab("") +
+    #ylab("Pasture Area km2") +
+    theme(axis.text.x = element_blank()) +
+  ggtitle("Map")
+
+CData_Pas %>% 
+  filter(source == "MB") %>%
+  ggplot(aes(x=Class, y=area, fill=Class)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    scale_y_continuous(name="Pasture Area km2", labels = scales::comma) +
+    facet_grid(year~state) +
+    xlab("")+
+    #ylab("Pasture Area km2") +
+    theme(axis.text.x = element_blank()) +
+  ggtitle("MB")
+
+```
+
+##Load Production Data
+```{r warning=F, message=F}
+
+meat_prod_Astates <- read_excel("Cattle_meat_production_Kg_2000_2017_all_states.xlsx", sheet = "Plan1", skip = 1)  #data for all states Astates
+
+#dairy data are by municiaplity for all states (Amunis)
+#dairy_prod_Amunis <- read_excel("dairy_Municipalities_Brazil.xlsx", sheet = "Tabela", skip = 1, na = c("", "-", "..."))
+```
+
+##Tidy production data
+```{r echo=F, warning=F, message=F}
+#tidy meat data
+meat_prod_Astates %>%
+  rename(state = NM_UF_SIGLA) %>%
+  dplyr::select(-NM_UF, -CD_GCUF, -`2016`, -`2017`) %>%      #drop columns
+  filter(!is.na(state)) %>%   #safer way to remove text line at bottom of state column
+  mutate_at(vars("2000":"2015"), as.numeric) -> meat_prod_Astates
+
+Fstate_abbrev <- c("TO", "BA", "MG", "SP", "PR",  "SC", "RS", "MS", "MT", "GO")
+
+#Filter meat focal states
+meat_prod_Astates %>%
+  filter(state %in% Fstate_abbrev)  -> meat_prod_Fstates
+
+meat_prod_Fstates_long <- meat_prod_Fstates %>%
+  gather(key = year, value = kg, -state) %>%
+  mutate_at(vars(year), as.integer)
+
+
+```
+
+
+```{r}
+
+#join meat to pasture areas
+meat_areas <- inner_join(CData_Pas, meat_prod_Fstates_long, by = c("year", "state"))
+
+#calculate intensities
+meat_areas <- meat_areas %>%
+  mutate(intensity = kg / area)
+
+
+```
+
+```{r fig.height=20, fig.width=12}
+
+meat_areas %>% 
+  filter(source == "Map") %>%
+  ggplot(aes(x=Class, y=intensity, fill=Class)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    scale_y_continuous(limits = c(0, 30000)) +
+    facet_grid(year~state) +
+    xlab("")+ylab("Intensity (kg/km2)") +
+    theme(axis.text.x = element_blank()) +
+  ggtitle("Map")
+
+meat_areas %>% 
+  filter(source == "MB") %>%
+  ggplot(aes(x=Class, y=intensity, fill=Class)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    scale_y_continuous(limits = c(0, 30000)) +
+    facet_grid(year~state) +
+    xlab("")+ylab("Intensity (kg/km2)") +
+    theme(axis.text.x = element_blank()) +
+  ggtitle("MB")
+
+```
+
+
+##Summary stats over time
+Now let's summarise the data over time and examine their means and medians (with variation)
+```{r echo=F}
+meat_areas %>%
+  group_by(state, Class, source) %>%
+  summarise(
+    area_mn = round(mean(area),0),
+    area_md = round(median(area),0),
+    area_sd = round(sd(area),0),
+    prod_mn = round(mean(kg),0),
+    prod_md = round(median(kg),0),
+    prod_sd = round(sd(kg),0),
+    int_mn = round(mean(intensity),0),
+    int_md = round(median(intensity),0),
+    int_sd = round(sd(intensity),0),
+    int_se = round(sd(intensity) / length(intensity), 3)
+    ) -> meat_summary
+
+```
+
+```{r fig.width=8}
+meat_summary %>%
+  #filter(source == "MB") %>%
+  ggplot(aes(x=Class, y=int_mn, fill=Class)) + 
+  geom_errorbar(aes(ymin=int_mn-int_se, ymax=int_mn+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Mean")
+
+meat_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=Class, y=int_md, fill=Class)) + 
+  geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Median")
+```
+
+This time limit the y-axis to 1
+```{r fig.width=8}
+meat_summary %>%
+  #filter(source == "MB") %>%
+  ggplot(aes(x=Class, y=int_mn, fill=Class)) + 
+  geom_errorbar(aes(ymin=int_mn-int_se, ymax=int_mn+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma,limits = c(0, 15000)) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Mean")
+
+meat_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=Class, y=int_md, fill=Class)) + 
+  geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma,limits = c(0, 15000)) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Median")
+```
+
+##Clean up
+```{r}
+
+unlink("ASCII", recursive = T) #delete ASCII directory created above
+
+```
