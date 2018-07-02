@@ -67,7 +67,7 @@ getLCs <- function(data)
 ```
 
 
-```{r}
+```{r results='hide', messages=F}
 
 unzip(zipfile="MapBiomas_23_ASCII_unclassified_allYears.zip")  # unzip all files 
 
@@ -89,7 +89,7 @@ Specify classifications and years to examine. Classifications should be the name
 #classifications to loop through 
 cls <- c("PastureA", "PastureB", "PastureC")
 
-yrls <- seq(2000,2002,1)
+yrls <- seq(2000,2015,1)
 
 ```
 
@@ -322,8 +322,8 @@ for(i in seq_along(mapStack_ls)){
   if(4 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'gray') }
   if(5 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'darkolivegreen') }
   
-  #rint(cls[i])
-  print(rasterVis::levelplot(mapStack_ls[[i]], pretty=T,att = 'landcover', col.regions=clabs), main=cls[i])
+  print(cls[i])
+  print(rasterVis::levelplot(mapStack_ls[[i]], pretty=T,att = 'landcover', col.regions=clabs), main=paste0(cls[i]))
   
 }
 
@@ -420,7 +420,14 @@ for(i in seq_along(cls)){
   
   SDataW_ls[[i]] <- bind_rows(SDataW_ls[[i]], list(LC = 'Total', MapTotal = MapTotalArea, MBTotal = MBTotalArea, AbsDiffc = ADiffc, PropDiffc = round(PDiffc,3)))
 
-  print(kable(SDataW_ls[[i]]))
+  
+}
+
+```
+
+```{r results='asis'}
+for(i in seq_along(cls)){
+  print(kable(SDataW_ls[[i]], caption=paste0(cls[i]) ))
 }
 
 ```
@@ -484,15 +491,18 @@ for(i in seq_along(cls)){
   PDiffc_Adj = ADiffc_Adj / MBTotalArea_Adj
   
   SDataW_Adj <- bind_rows(SDataW_Adj, list(LC = 'Total', MapTotal = round(MapTotalArea_Adj,0), MBTotal = MBTotalArea_Adj, AbsDiffc = round(ADiffc_Adj,3), PropDiffc = round(PDiffc_Adj,3)))
-  
-  print(kable(SDataW_Adj))
-  
+
   SDataW_Adj_ls[[i]] <- SDataW_Adj
 }
 
 ```
 
+```{r results='asis'}
+for(i in seq_along(cls)){
+  print(kable(SDataW_Adj_ls[[i]], caption=paste0(cls[i])))
+}
 
+```
 
 ##Clean up
 ```{r}
