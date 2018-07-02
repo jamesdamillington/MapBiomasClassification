@@ -316,7 +316,7 @@ for(i in seq_along(cls)){
 for(i in seq_along(cls)){
   
   CData_ls[[i]] <- CData_ls[[i]] %>%
-    mutate(Class = cls[i])
+    mutate(classification = cls[i])
 }
 
 #union the CData tables for the different classifications
@@ -335,8 +335,8 @@ CData_Pas <- CDataU %>%
 ```{r fig.height=20, fig.width=12}
 
 CData_Pas %>% 
-  filter(source == "Map") %>%
-  ggplot(aes(x=Class, y=area, fill=Class)) + 
+  dplyr::filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=area, fill=classification)) + 
     geom_bar(stat="identity", colour="white", position = "dodge") +
     scale_y_continuous(name="Pasture Area km2", labels = scales::comma) +
     facet_grid(year~state) +
@@ -346,8 +346,8 @@ CData_Pas %>%
   ggtitle("Map")
 
 CData_Pas %>% 
-  filter(source == "MB") %>%
-  ggplot(aes(x=Class, y=area, fill=Class)) + 
+  dplyr::filter(source == "MB") %>%
+  ggplot(aes(x=classification, y=area, fill=classification)) + 
     geom_bar(stat="identity", colour="white", position = "dodge") +
     scale_y_continuous(name="Pasture Area km2", labels = scales::comma) +
     facet_grid(year~state) +
@@ -364,7 +364,7 @@ CData_Pas %>%
 meat_prod_Astates <- read_excel("Cattle_meat_production_Kg_2000_2017_all_states.xlsx", sheet = "Plan1", skip = 1)  #data for all states Astates
 
 #dairy data are by municiaplity for all states (Amunis)
-#dairy_prod_Amunis <- read_excel("dairy_Municipalities_Brazil.xlsx", sheet = "Tabela", skip = 1, na = c("", "-", "..."))
+dairy_prod_Amunis <- read_excel("dairy_Municipalities_Brazil.xlsx", sheet = "Tabela", skip = 1, na = c("", "-", "..."))
 ```
 
 ##Tidy production data
@@ -376,6 +376,7 @@ meat_prod_Astates %>%
   filter(!is.na(state)) %>%   #safer way to remove text line at bottom of state column
   mutate_at(vars("2000":"2015"), as.numeric) -> meat_prod_Astates
 
+Fstate_vals <- c(17,	29,	31,	35,	41,	42,	43,	50,	51,	52)
 Fstate_abbrev <- c("TO", "BA", "MG", "SP", "PR",  "SC", "RS", "MS", "MT", "GO")
 
 #Filter meat focal states
@@ -387,51 +388,78 @@ meat_prod_Fstates_long <- meat_prod_Fstates %>%
   mutate_at(vars(year), as.integer)
 
 
+#dairy data need more work as are for municipalities
+dairy_prod_Amunis <- dairy_prod_Amunis %>%
+  rename(muniID = `IBGE CODE`) %>%
+  filter(!is.na(muniID)) %>%   #safer way to remove text line in muniID 
+  mutate(state = substr(muniID, 1, 2)) %>%     #extract the muniID
+  mutate_at(vars("2000":"2015"), as.numeric) %>%  #convert values to numeric
+  dplyr::select(-muniID, -Municipality)     #drop unwanted states 
+
+dairy_prod_Amunis <- dairy_prod_Amunis %>%
+  group_by(state) %>%  
+  mutate_all(funs(. * 1.03 * 1000)) %>%     #convert from thousand litres to kgs
+  summarise_all(sum, na.rm=T) -> dairy_Astates   #summarise munis to states
+
+dairy_prod_Fstates<- dairy_prod_Amunis %>%
+  filter(state %in% Fstate_vals) %>% 
+  mutate(state=replace(state, 1:length(Fstate_vals), Fstate_abbrev))
+
+dairy_prod_Fstates_long <- dairy_prod_Fstates %>%
+  gather(key = year, value = kg, -state) %>%
+  mutate_at(vars(year), as.integer)
+
 ```
 
 
 ```{r}
 
-#join meat to pasture areas
+#join to pasture areas
 meat_areas <- inner_join(CData_Pas, meat_prod_Fstates_long, by = c("year", "state"))
+dairy_areas <- inner_join(CData_Pas, dairy_prod_Fstates_long, by = c("year", "state"))
 
 #calculate intensities
 meat_areas <- meat_areas %>%
   mutate(intensity = kg / area)
 
+dairy_areas <- dairy_areas %>%
+  mutate(intensity = kg / area)
 
 ```
 
+#Meat
 ```{r fig.height=20, fig.width=12}
 
 meat_areas %>% 
   filter(source == "Map") %>%
-  ggplot(aes(x=Class, y=intensity, fill=Class)) + 
+  ggplot(aes(x=classification, y=intensity, fill=classification)) + 
     geom_bar(stat="identity", colour="white", position = "dodge") +
     scale_y_continuous(limits = c(0, 30000)) +
     facet_grid(year~state) +
     xlab("")+ylab("Intensity (kg/km2)") +
     theme(axis.text.x = element_blank()) +
-  ggtitle("Map")
+  ggtitle("Meat, Map")
 
 meat_areas %>% 
   filter(source == "MB") %>%
-  ggplot(aes(x=Class, y=intensity, fill=Class)) + 
+  ggplot(aes(x=classification, y=intensity, fill=classification)) + 
     geom_bar(stat="identity", colour="white", position = "dodge") +
     scale_y_continuous(limits = c(0, 30000)) +
     facet_grid(year~state) +
     xlab("")+ylab("Intensity (kg/km2)") +
     theme(axis.text.x = element_blank()) +
-  ggtitle("MB")
+  ggtitle("Meat, MB")
 
 ```
+
+
 
 
 ##Summary stats over time
 Now let's summarise the data over time and examine their means and medians (with variation)
 ```{r echo=F}
 meat_areas %>%
-  group_by(state, Class, source) %>%
+  group_by(state, classification, source) %>%
   summarise(
     area_mn = round(mean(area),0),
     area_md = round(median(area),0),
@@ -450,50 +478,161 @@ meat_areas %>%
 ```{r fig.width=8}
 meat_summary %>%
   #filter(source == "MB") %>%
-  ggplot(aes(x=Class, y=int_mn, fill=Class)) + 
+  ggplot(aes(x=classification, y=int_mn, fill=classification)) + 
   geom_errorbar(aes(ymin=int_mn-int_se, ymax=int_mn+int_se), width=.1) +
   geom_bar(stat="identity", colour="white", position = "dodge") +
   facet_grid(source~state) +
   scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma) +
   xlab("")+
   theme(axis.text.x = element_blank()) +
-  ggtitle("Mean")
+  ggtitle("Meat, Mean")
 
 meat_summary %>%
   #filter(source == "Map") %>%
-  ggplot(aes(x=Class, y=int_md, fill=Class)) + 
+  ggplot(aes(x=classification, y=int_md, fill=classification)) + 
   geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
   geom_bar(stat="identity", colour="white", position = "dodge") +
   facet_grid(source~state) +
   scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma) +
   xlab("")+
   theme(axis.text.x = element_blank()) +
-  ggtitle("Median")
+  ggtitle("Meat, Median")
 ```
 
-This time limit the y-axis to 1
+This time limit the y-axis to 15,000
 ```{r fig.width=8}
 meat_summary %>%
   #filter(source == "MB") %>%
-  ggplot(aes(x=Class, y=int_mn, fill=Class)) + 
+  ggplot(aes(x=classification, y=int_mn, fill=classification)) + 
   geom_errorbar(aes(ymin=int_mn-int_se, ymax=int_mn+int_se), width=.1) +
   geom_bar(stat="identity", colour="white", position = "dodge") +
   facet_grid(source~state) +
   scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma,limits = c(0, 15000)) +
   xlab("")+
   theme(axis.text.x = element_blank()) +
-  ggtitle("Mean")
+  ggtitle("Meat, Mean")
 
 meat_summary %>%
   #filter(source == "Map") %>%
-  ggplot(aes(x=Class, y=int_md, fill=Class)) + 
+  ggplot(aes(x=classification, y=int_md, fill=classification)) + 
   geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
   geom_bar(stat="identity", colour="white", position = "dodge") +
   facet_grid(source~state) +
   scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma,limits = c(0, 15000)) +
   xlab("")+
   theme(axis.text.x = element_blank()) +
-  ggtitle("Median")
+  ggtitle("Meat, Median")
+```
+
+
+```{r }
+
+kable(arrange(meat_summary, desc(int_mn), state, classification), caption="Meat")
+
+
+```
+
+#Dairy
+
+```{r}
+
+dairy_areas %>%
+  group_by(state, classification, source) %>%
+  summarise(
+    area_mn = round(mean(area),0),
+    area_md = round(median(area),0),
+    area_sd = round(sd(area),0),
+    prod_mn = round(mean(kg),0),
+    prod_md = round(median(kg),0),
+    prod_sd = round(sd(kg),0),
+    int_mn = round(mean(intensity),0),
+    int_md = round(median(intensity),0),
+    int_sd = round(sd(intensity),0),
+    int_se = round(sd(intensity) / length(intensity), 3)
+    ) -> dairy_summary
+
+```
+
+
+```{r fig.height=20, fig.width=12}
+
+dairy_areas %>% 
+  filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=intensity, fill=classification)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    #scale_y_continuous(limits = c(0, 30000)) +
+    facet_grid(year~state) +
+    xlab("")+ylab("Intensity (kg/km2)") +
+    theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, Map")
+
+dairy_areas %>% 
+  filter(source == "MB") %>%
+  ggplot(aes(x=classification, y=intensity, fill=classification)) + 
+    geom_bar(stat="identity", colour="white", position = "dodge") +
+    #scale_y_continuous(limits = c(0, 30000)) +
+    facet_grid(year~state) +
+    xlab("")+ylab("Intensity (kg/km2)") +
+    theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, MB")
+
+```
+
+```{r fig.width=8}
+dairy_summary %>%
+  #filter(source == "MB") %>%
+  ggplot(aes(x=classification, y=int_mn, fill=classification)) + 
+  geom_errorbar(aes(ymin=int_mn-int_se, ymax=int_mn+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, Mean")
+
+dairy_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=int_md, fill=classification)) + 
+  geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, Median")
+```
+
+This time limit the y-axis to 250,000
+```{r fig.width=8}
+dairy_summary %>%
+  #filter(source == "MB") %>%
+  ggplot(aes(x=classification, y=int_mn, fill=classification)) + 
+  geom_errorbar(aes(ymin=int_mn-int_se, ymax=int_mn+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma,limits = c(0, 250000)) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, Mean")
+
+dairy_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=int_md, fill=classification)) + 
+  geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name="Intensity (kg / sq km)", labels = scales::comma,limits = c(0, 250000)) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, Median")
+```
+
+Need to ignore SC as has such low area? Use next largest PastureB (Map) which is PR (67,000)
+
+```{r }
+
+kable(arrange(dairy_summary, desc(int_mn), state, classification), caption="Dairy")
+
 ```
 
 ##Clean up
