@@ -5,6 +5,7 @@ date: "July 2018"
 output: 
   html_document: 
     keep_md: yes
+    code_folding: hide
 ---
 
 This script (will eventually) analyses all years for multiple classifications
@@ -89,7 +90,6 @@ Specify classifications and years to examine. Classifications should be the name
 cls <- c("PastureA", "PastureB", "PastureC")
 
 yrls <- seq(2000,2002,1)
-mapStack <- stack()
 
 ```
 
@@ -102,16 +102,23 @@ CData_ls <- vector('list', length(cls))
 CDataW_ls <- vector('list', length(cls))
 SDataW_ls <- vector('list', length(cls))
 Stotals_ls <- vector('list', length(cls))
+mapStack_ls <- vector('list', length(cls))
 
 names(CData_ls) <- cls
 names(CDataW_ls) <- cls
 names(SDataW_ls) <- cls
 names(Stotals_ls) <- cls
+names(mapStack_ls) <- cls
 
+#loop over classifications
 for(i in seq_along(cls)){
   
   classification <- read_excel("MapBiomas_CRAFTY_classifications.xlsx", sheet = cls[i], range="B2:C21", col_names=F) 
   
+  #reset mapStack for this Classification
+  mapStack <- stack()
+
+  #loop over years  
   for(j in seq_along(yrls)){
 
   print(paste0("Classification: ",cls[i],", Year: ",yrls[j]))
@@ -143,16 +150,12 @@ for(i in seq_along(cls)){
   map.t <- as.data.frame(map.t)
   map.t <- plyr::rename(map.t, c("vals" = "map"))
 
-  print("joining")
-  
   #so need to join 
   map_munis <- left_join(as.data.frame(munis.t), as.data.frame(map.t), by = c("row" = "row", "col" = "col"))
 
   #now summarise by muniID
   lcs_map_munis <- getLCs(map_munis)
 
-  print("converting")
-  
   #convert cell counts to areas (km2) and add state id
   map_areas_munis <- lcs_map_munis %>%
     mutate(LC1area = round(LC1 * NonNAs) * 25) %>%
@@ -297,6 +300,29 @@ for(i in seq_along(cls)){
   }
   
   CData_ls[[i]] <- CData
+  
+  names(mapStack) <- yrls
+  mapStack_ls[[i]] <- mapStack
+}
+
+```
+
+##Maps
+```{r warning=F, message=F}
+
+#use loop instead of lapply to construct approproate palette
+for(i in seq_along(mapStack_ls)){
+
+  clabs <- c()
+  if(1 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'forestgreen') }
+  if(2 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'wheat1') }
+  if(3 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'orange2') }
+  if(4 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'gray') }
+  if(5 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'darkolivegreen') }
+  
+  print(cls[i])
+  print(rasterVis::levelplot(mapStack_ls[[i]], pretty=T,att = 'landcover', col.regions=clabs))
+  
 }
 
 ```
