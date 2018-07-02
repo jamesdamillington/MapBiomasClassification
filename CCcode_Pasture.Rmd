@@ -314,6 +314,27 @@ for(i in seq_along(cls)){
 
 ```
 
+#Maps
+For 2015 for the three different classifications (for quick visual comparison)
+```{r fig.width=12, warning=F, message=F}
+for(i in seq_along(mapStack_ls)){
+  
+  clabs <- c()
+  if(1 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'forestgreen') }
+  if(2 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'wheat1') }
+  if(3 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'orange2') }
+  if(4 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'gray') }
+  if(5 %in% levels(mapStack_ls[[i]])[[1]]$ID) { clabs <- c(clabs, 'darkolivegreen') }
+  
+  print(cls[i])
+
+  print(rasterVis::levelplot(mapStack_ls[[i]]$X2015, pretty=T,att = 'landcover', col.regions=clabs, main=paste0(cls[[i]], "2015")))
+  
+}
+
+```
+
+
 ##Pasture area by state, year and classification
 ```{r warning=F, message=F}
 
@@ -363,6 +384,8 @@ CData_Pas %>%
   ggtitle("MB")
 
 ```
+
+
 
 ```{r warning=F, message=F}
 #Load Production Data
@@ -652,7 +675,7 @@ dairy_summary %>%
 
 _PastureA_ for SC is not plotted at its value is so large. 
 
-**I think we maybe need to ignore SC as it has such high intensity (due to very low area - see plots at top)?**
+**I think we maybe need to ignore SC as it has such high intensity?**  (High intensity is due to very low area - see plots at top, and raw areas table at bottom, of this file)
 
 **And we should use the** _PastureB_ **classification?**
 
@@ -663,6 +686,14 @@ If we ignore SC and use _PastureB_ the next largest _PastureB_ dairy intensity v
 kable(arrange(dairy_summary, desc(int_mn), state, classification), caption="Dairy data, sorted on mean values descending")
 
 ```
+
+Table of raw areas data
+```{r}
+
+kable(arrange(CData_Pas, area, state, year), caption="Pasture areas, sorted on state and area ")
+
+```
+
 
 ```{r}
 
