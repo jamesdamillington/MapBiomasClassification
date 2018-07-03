@@ -6,6 +6,7 @@ output:
   html_document: 
     keep_md: yes
     code_folding: hide
+    df_print: paged
 ---
 
 This script analyses pasture areas, meat production and dairy production (and intensities) for all states and years, and multiple classifications (see accompanying Excel file) for two data sources:
@@ -328,7 +329,7 @@ for(i in seq_along(mapStack_ls)){
   
   print(cls[i])
 
-  print(rasterVis::levelplot(mapStack_ls[[i]]$X2015, pretty=T,att = 'landcover', col.regions=clabs, main=paste0(cls[[i]], "2015")))
+  print(rasterVis::levelplot(mapStack_ls[[i]]$X2015, pretty=T,att = 'landcover', col.regions=clabs, main=paste0(cls[[i]], " 2015")))
   
 }
 
@@ -385,6 +386,13 @@ CData_Pas %>%
 
 ```
 
+
+Table: Pasture areas, sorted on state and area
+```{r rows.print=30}
+
+arrange(CData_Pas, area, state, year)
+
+```
 
 
 ```{r warning=F, message=F}
@@ -501,6 +509,7 @@ meat_areas %>%
     prod_sd = round(sd(kg),0),
     int_mn = round(mean(intensity),0),
     int_md = round(median(intensity),0),
+    int_max = round(max(intensity),0),
     int_sd = round(sd(intensity),0),
     int_se = round(sd(intensity) / length(intensity), 3)
     ) -> meat_summary
@@ -529,11 +538,22 @@ meat_summary %>%
   xlab("")+
   theme(axis.text.x = element_blank()) +
   ggtitle("Meat, Median")
+
+meat_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=int_max, fill=classification)) + 
+  #geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name=expression(Intensity~kg~km^{2}), labels = scales::comma) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Meat, Maxima")
 ```
 
 Again we see the same patterns; SC, SP and RS are greater than other states and _PastureA_ > _PastureB_ > _PastureC_.
 
-If we plot again, but this time limiting the y-axis to 15,000 kg/km2
+If we plot again, but this time limiting the y-axis to 15,000 kg/km2 (max at 20,000)
 ```{r fig.width=8}
 meat_summary %>%
   #filter(source == "MB") %>%
@@ -556,13 +576,39 @@ meat_summary %>%
   xlab("")+
   theme(axis.text.x = element_blank()) +
   ggtitle("Meat, Median")
+
+meat_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=int_max, fill=classification)) + 
+  #geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name=expression(Intensity~kg~km^{2}), labels = scales::comma,limits = c(0, 20000)) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Meat, Maxima")
 ```
 
-We can now more clearly compare classifications. In some states (PR, SP) _PastureA_ and _PastureB_ are very similar values, but in many others _PastureB_ is lower; _PastureC_ is noticably smaller than the other classifications. We also see that Intensity is greater for  _MB_ data compared to _Map_. 
+We can now more clearly compare classifications. In some states (PR, SP) _PastureA_ and _PastureB_ are very similar values, but in many others _PastureB_ is lower; _PastureC_ is noticably smaller than the other classifications. We also see that Intensity is greater for  _MB_ data compared to _Map_. (NB: _PastureB_ for SC is very similar for MB data)
 
 **Seems feasible to use _PastureB_ classification?**
 
-If so, the 'perfect' meat intensity would be ~9,100 kg km2 (see raw table of summary data below)
+If so, the 'perfect' meat intensity would be ~9,200 kg km2 if using mean/median or ~11,000 if using max (see raw tables of summary data below)
+
+Or, mean of maxima (without SC) is ~4,500
+
+```{r}
+
+meat_summary %>%
+  filter(source == "Map" & classification == "PastureB") %>%
+  dplyr::select(-starts_with("prod"), -int_sd, -int_se) #%>%
+  filter(state != "SC") %>%
+  group_by(classification) %>%
+  summarise_at(vars(int_max), mean)
+
+
+```
+
 ```{r }
 
 kable(arrange(meat_summary, desc(int_mn), state, classification), caption="Meat data, sorted on mean production values descending")
@@ -586,6 +632,7 @@ dairy_areas %>%
     prod_sd = round(sd(kg),0),
     int_mn = round(mean(intensity),0),
     int_md = round(median(intensity),0),
+    int_max = round(max(intensity),0),
     int_sd = round(sd(intensity),0),
     int_se = round(sd(intensity) / length(intensity), 3)
     ) -> dairy_summary
@@ -644,6 +691,18 @@ dairy_summary %>%
   xlab("")+
   theme(axis.text.x = element_blank()) +
   ggtitle("Dairy, Median")
+
+dairy_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=int_max, fill=classification)) + 
+  #geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name=expression(Intensity~kg~km^{2}), labels = scales::comma) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, Maxima")
+
 ```
 
 Again, we see the very high intensities for SC, RS and PR. 
@@ -671,6 +730,17 @@ dairy_summary %>%
   xlab("")+
   theme(axis.text.x = element_blank()) +
   ggtitle("Dairy, Median")
+
+dairy_summary %>%
+  #filter(source == "Map") %>%
+  ggplot(aes(x=classification, y=int_max, fill=classification)) + 
+  #geom_errorbar(aes(ymin=int_md-int_se, ymax=int_md+int_se), width=.1) +
+  geom_bar(stat="identity", colour="white", position = "dodge") +
+  facet_grid(source~state) +
+  scale_y_continuous(name=expression(Intensity~kg~km^{2}), labels = scales::comma, limits = c(0, 250000)) +
+  xlab("")+
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Dairy, Maxima")
 ```
 
 _PastureA_ for SC is not plotted at its value is so large. 
@@ -679,20 +749,29 @@ _PastureA_ for SC is not plotted at its value is so large.
 
 **And we should use the** _PastureB_ **classification?**
 
-If we ignore SC and use _PastureB_ the next largest _PastureB_ dairy intensity value (for Map) is PR (around 67,000; see Table below)
+If we ignore SC and use _PastureB_ the next largest _PastureB_ dairy intensity value (for Map) is PR (~67,000 for mean/median, ~98,000 for max; see Table below)
 
-```{r }
+Or, mean of the maxima (excluding SC) is ~25,000
 
-kable(arrange(dairy_summary, desc(int_mn), state, classification), caption="Dairy data, sorted on mean values descending")
-
-```
-
-Table of raw areas data
+Table: Summary Dairy data _PastureB_ classification for _Map_ 
 ```{r}
 
-kable(arrange(CData_Pas, area, state, year), caption="Pasture areas, sorted on state and area ")
+dairy_summary %>%
+  filter(source == "Map" & classification == "PastureB") %>%
+  dplyr::select(-starts_with("prod"), -int_sd, -int_se) #%>%
+  filter(state != "SC") %>%
+  group_by(classification) %>%
+  summarise_at(vars(int_max), mean)
 
 ```
+
+Table: Dairy data, sorted on mean values descending
+```{r rows.print=15}
+
+arrange(dairy_summary, desc(int_mn), state, classification)
+
+```
+
 
 
 ```{r}
