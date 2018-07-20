@@ -18,13 +18,19 @@ This script analyses pasture areas, meat production and dairy production (and in
 ```{r results='hide', warning=F, message=F}
 
 rm(list=ls())
-library(tidyverse)
-library(raster)
-library(readxl)      #for reading Excel sheets
-library(scales)      #useful for ggplotting
-library(knitr)
-library(rasterVis)   #more useful raster plotting
-library(cowplot)     #useful for ggplotting
+
+packages <- c(
+  "tidyverse",
+  "raster",
+  "readxl",       #for reading Excel sheets
+  "scales",       #useful for ggplotting
+  "knitr",
+  "rasterVis",    #more useful raster plotting
+  "cowplot"       #useful for ggplotting
+  )     
+  
+#use lapply to suppress all wanings: https://stackoverflow.com/a/46685042
+invisible(lapply(packages, function(xxx) suppressMessages(require(xxx, character.only = TRUE,quietly=TRUE,warn.conflicts = FALSE))))
 
 ```
 
@@ -316,7 +322,7 @@ for(i in seq_along(cls)){
 ```
 
 #Maps
-For 2015 for the three different classifications (for quick visual comparison)
+For 2000 for the three different classifications (for quick visual comparison)
 ```{r fig.width=12, warning=F, message=F}
 for(i in seq_along(mapStack_ls)){
   
@@ -329,7 +335,7 @@ for(i in seq_along(mapStack_ls)){
   
   print(cls[i])
 
-  print(rasterVis::levelplot(mapStack_ls[[i]]$X2015, pretty=T,att = 'landcover', col.regions=clabs, main=paste0(cls[[i]], " 2015")))
+  print(rasterVis::levelplot(mapStack_ls[[i]]$X2000, pretty=T,att = 'landcover', col.regions=clabs, main=paste0(cls[[i]], " 2000")))
   
 }
 
@@ -595,19 +601,46 @@ We can now more clearly compare classifications. In some states (PR, SP) _Pastur
 
 If so, the 'perfect' meat intensity would be ~9,200 kg km2 if using mean/median or ~11,000 if using max (see raw tables of summary data below)
 
+```{r}
+
+meat_summary %>%
+  filter(source == "Map" & classification == "PastureB") %>%
+  dplyr::select(-starts_with("prod"), -int_sd, -int_se) %>%
+  filter(state != "SC") 
+
+```
+
+
 Or, mean of maxima (without SC) is ~4,500
 
 ```{r}
 
 meat_summary %>%
   filter(source == "Map" & classification == "PastureB") %>%
-  dplyr::select(-starts_with("prod"), -int_sd, -int_se) #%>%
+  dplyr::select(-starts_with("prod"), -int_sd, -int_se) %>%
   filter(state != "SC") %>%
   group_by(classification) %>%
   summarise_at(vars(int_max), mean)
 
-
 ```
+
+In discussion with Ramon (email 06/07/18): 
+
+"the pasture B seems very reasonable to me. More realistic than the other situations.
+To make sure our assumptions based on the results, I was checking some data from the livestock sector and I found [this report](http://csr.ufmg.br/pecuaria/portfolio-item/cenarios-para-o-brasil/). All in Portuguese, but the tables and figures is not hard to understand.
+
+The point is: based on future scenarios to the livestock sector in Brazil, they expect a productivity of 87.3kg/hectare in 2030 if the Brazilian sector modernize. It means that the potential is that the same as exactly the "perfect" meat intensity that you found based on the mapabiomas data (that is 9,100kg/km2).
+
+*See the table row "Produção de @/hectare". @ is equivalent to 15kg."
+
+87.3 kg/ha == 8,730 kg/sq km
+
+This is comforting as it is the same order of magnitude as we found above. **Given we want some indication of 'perfect' we will use the higher value of 11,000 kg/sq km (the maximum of all states bar SC in PastureB land cover re-classification**
+
+
+In turn, 11,000 kg/sq km == **0.275 gg/25sq km**
+
+Full meat summary data table for reference:
 
 ```{r }
 
@@ -751,6 +784,16 @@ _PastureA_ for SC is not plotted at its value is so large.
 
 If we ignore SC and use _PastureB_ the next largest _PastureB_ dairy intensity value (for Map) is PR (~67,000 for mean/median, ~98,000 for max; see Table below)
 
+```{r}
+
+dairy_summary %>%
+  filter(source == "Map" & classification == "PastureB") %>%
+  dplyr::select(-starts_with("prod"), -int_sd, -int_se) %>%
+  filter(state != "SC") 
+
+```
+
+
 Or, mean of the maxima (excluding SC) is ~25,000
 
 Table: Summary Dairy data _PastureB_ classification for _Map_ 
@@ -758,12 +801,30 @@ Table: Summary Dairy data _PastureB_ classification for _Map_
 
 dairy_summary %>%
   filter(source == "Map" & classification == "PastureB") %>%
-  dplyr::select(-starts_with("prod"), -int_sd, -int_se) #%>%
+  dplyr::select(-starts_with("prod"), -int_sd, -int_se) %>%
   filter(state != "SC") %>%
   group_by(classification) %>%
   summarise_at(vars(int_max), mean)
 
 ```
+
+
+In discussion with Ramon (email 10/07/18):
+
+"about the data to support the model results for dairy production, probably will not be "simple" as we found to the meat. For dairy production there are many variables and land is just one. Technology and feed supply are just two to mention. We know that the same variables are important for meat but in dairy production is higher significant. Other issue is that for dairy production the productivity is usually measuredTherefore,  by other ways, such as liters/number of animals. However, I am sure taht we can find data to better help us to understand the model's result.
+
+Therefore, based on [a study from Embrapa](https://www.infoteca.cnptia.embrapa.br/bitstream/doc/890118/1/Areasdeconcentracao.pdf), in 2006 the higher productivity was 89 thousand liters of milk per square.kilometer.
+
+Converting to liters to kg:
+
+89,000 * 1.03 = 91,670
+
+As above for meat, this is comforting as it shows the correct order of magnitde. Again, **given we want some indication of 'perfect' we will use the higher value of 100,000 kg/sq km (the maximum of all states bar SC in PastureB land cover re-classification**
+
+
+In turn, 100,000 kg/sq km == **2.5 gg/25sq km**
+
+Full table for reference below.
 
 Table: Dairy data, sorted on mean values descending
 ```{r rows.print=15}
