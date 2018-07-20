@@ -836,7 +836,7 @@ arrange(dairy_summary, desc(int_mn), state, classification)
 
 
 ```{r}
-
-unlink("ASCII", recursive = T) #delete ASCII directory created above
+#if needed to remove ASCII folder
+#unlink("ASCII", recursive = T) #delete ASCII directory created above
 
 ```
